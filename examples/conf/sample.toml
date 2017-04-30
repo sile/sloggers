@@ -1,0 +1,10 @@
+[loggers.terminal]
+type = "terminal"
+
+# TODO: default
+format = "compact"
+timezone = "local"
+output = "stdout"
+
+[loggers.null]
+type = "null"

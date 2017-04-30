@@ -1,0 +1,19 @@
+[package]
+name = "sloggers"
+version = "0.1.0"
+authors = ["Takeru Ohta <phjgt308@gmail.com>"]
+
+[dependencies]
+log = "*"
+serde = "1"
+serde_derive = "1"
+slog = "2"
+slog-async = "2"
+slog-term = "2"
+slog-scope = "3"
+slog-stdlog = "2"
+toml = "0.4"
+trackable = "0.1"
+
+[dev-dependencies]
+clap = "2"

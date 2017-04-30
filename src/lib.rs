@@ -1,4 +1,3 @@
-#[macro_use]
 extern crate log;
 extern crate serde;
 #[macro_use]
@@ -13,16 +12,17 @@ extern crate toml;
 #[macro_use]
 extern crate trackable;
 
-pub use build::Build;
+pub use build::{Build, LoggerBuilder};
 pub use config::Config;
 pub use error::{Error, ErrorKind};
-pub use misc::set_stdlog_logger;
+pub use misc::{set_stdlog_logger, Severity};
 
 pub mod config;
-pub mod build;
 pub mod null;
 pub mod loggers;
+pub mod terminal;
 
+mod build;
 mod error;
 mod misc;
 

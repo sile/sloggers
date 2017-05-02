@@ -17,6 +17,7 @@ pub use config::{Config, LoggerConfig};
 pub use error::{Error, ErrorKind};
 pub use misc::{set_stdlog_logger, Severity};
 
+pub mod file;
 pub mod null;
 pub mod terminal;
 

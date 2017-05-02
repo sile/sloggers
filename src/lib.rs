@@ -13,16 +13,15 @@ extern crate toml;
 extern crate trackable;
 
 pub use build::{Build, LoggerBuilder};
-pub use config::Config;
+pub use config::{Config, LoggerConfig};
 pub use error::{Error, ErrorKind};
 pub use misc::{set_stdlog_logger, Severity};
 
-pub mod config;
 pub mod null;
-pub mod loggers;
 pub mod terminal;
 
 mod build;
+mod config;
 mod error;
 mod misc;
 

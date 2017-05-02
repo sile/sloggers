@@ -9,13 +9,15 @@ pub trait Build {
 }
 
 #[derive(Debug)]
-pub struct LoggerBuilder;
-impl LoggerBuilder {
-    pub fn null() -> NullLoggerBuilder {
-        NullLoggerBuilder
+pub enum LoggerBuilder {
+    Null(NullLoggerBuilder),
+    Terminal(TerminalLoggerBuilder),
+}
+impl Build for LoggerBuilder {
+    fn build(&self) -> Result<Logger> {
+        match *self {
+            LoggerBuilder::Null(ref b) => track!(b.build()),
+            LoggerBuilder::Terminal(ref b) => track!(b.build()),
+        }
     }
-    pub fn terminal() -> TerminalLoggerBuilder {
-        TerminalLoggerBuilder::new()
-    }
-    // TODO: from_config
 }

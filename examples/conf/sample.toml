@@ -1,10 +1,5 @@
-[loggers.terminal]
 type = "terminal"
-
-# TODO: default
-format = "compact"
+format = "full"
 timezone = "local"
-output = "stdout"
-
-[loggers.null]
-type = "null"
+destination = "stdout"
+level = "debug"

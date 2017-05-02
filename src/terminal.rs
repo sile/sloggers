@@ -4,7 +4,7 @@ use slog::{Logger, Drain, FnValue};
 use slog_async::Async;
 use slog_term::{self, TermDecorator, CompactFormat, FullFormat};
 
-use {Result, Build, Severity};
+use {Result, Build, Config, Severity};
 use misc::module_and_line;
 
 #[derive(Debug)]
@@ -139,5 +139,25 @@ impl Destination {
             Destination::Stdout => TermDecorator::new().stdout().build(),
             Destination::Stderr => TermDecorator::new().stderr().build(),
         }
+    }
+}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct TerminalLoggerConfig {
+    // TODO: default
+    pub level: Severity,
+    pub format: Format,
+    pub timezone: Timezone,
+    pub destination: Destination,
+}
+impl Config for TerminalLoggerConfig {
+    type Builder = TerminalLoggerBuilder;
+    fn try_into_builder(self) -> Result<Self::Builder> {
+        let mut builder = TerminalLoggerBuilder::new();
+        builder.level(self.level);
+        builder.format(self.format);
+        builder.timezone(self.timezone);
+        builder.destination(self.destination);
+        Ok(builder)
     }
 }

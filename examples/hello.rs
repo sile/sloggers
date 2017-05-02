@@ -6,7 +6,7 @@ extern crate sloggers;
 extern crate trackable;
 
 use clap::{App, Arg};
-use sloggers::Config;
+use sloggers::{Build, Config, LoggerConfig};
 
 fn main() {
     let matches = App::new("hello")
@@ -14,9 +14,8 @@ fn main() {
         .get_matches();
     let config_file = matches.value_of("CONFIG_FILE").unwrap();
 
-    let config = track_try_unwrap!(Config::from_toml_file(config_file));
-    let loggers = track_try_unwrap!(config.build());
-    for (id, logger) in loggers {
-        info!(logger, "Hello {:?}", id);
-    }
+    let config = track_try_unwrap!(LoggerConfig::from_toml_file(config_file));
+    let builder = track_try_unwrap!(config.try_into_builder());
+    let logger = track_try_unwrap!(builder.build());
+    info!(logger, "Hello World!");
 }

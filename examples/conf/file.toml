@@ -1,0 +1,5 @@
+type = "file"
+format = "full"
+timezone = "local"
+level = "debug"
+path = "file.log"

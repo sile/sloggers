@@ -5,6 +5,7 @@ use serde::{Serialize, Deserialize};
 use toml;
 
 use {Result, Build, LoggerBuilder};
+use file::FileLoggerConfig;
 use null::NullLoggerConfig;
 use terminal::TerminalLoggerConfig;
 
@@ -26,6 +27,9 @@ pub trait Config: Sized + Serialize + for<'a> Deserialize<'a> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum LoggerConfig {
+    #[serde(rename = "file")]
+    File(FileLoggerConfig),
+
     #[serde(rename = "null")]
     Null(NullLoggerConfig),
 
@@ -36,6 +40,7 @@ impl Config for LoggerConfig {
     type Builder = LoggerBuilder;
     fn try_into_builder(self) -> Result<Self::Builder> {
         match self {
+            LoggerConfig::File(c) => track!(c.try_into_builder()).map(LoggerBuilder::File),
             LoggerConfig::Null(c) => track!(c.try_into_builder()).map(LoggerBuilder::Null),
             LoggerConfig::Terminal(c) => track!(c.try_into_builder()).map(LoggerBuilder::Terminal),
         }

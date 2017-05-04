@@ -14,7 +14,7 @@ license = "MIT"
 travis-ci = {repository = "sile/sloggers"}
 
 [dependencies]
-log = "*"
+log = "0.3"
 serde = "1"
 serde_derive = "1"
 slog = "2"

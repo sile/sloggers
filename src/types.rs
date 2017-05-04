@@ -1,23 +1,30 @@
-use std::io::{self, Write};
+//! Commonly used types.
 use slog::{Level, LevelFilter, Drain};
-use slog_term;
 
+/// The severity of a log record.
+///
+/// # Examples
+///
+/// The default value:
+///
+/// ```
+/// use sloggers::types::Severity;
+///
+/// assert_eq!(Severity::default(), Severity::Info);
+/// ```
+#[allow(missing_docs)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Severity {
-    #[serde(rename = "trace")]
     Trace,
-    #[serde(rename = "debug")]
     Debug,
-    #[serde(rename = "info")]
     Info,
-    #[serde(rename = "warning")]
     Warning,
-    #[serde(rename = "error")]
     Error,
-    #[serde(rename = "critical")]
     Critical,
 }
 impl Severity {
+    /// Converts `Severity` to `Level`.
     pub fn as_level(&self) -> Level {
         match *self {
             Severity::Trace => Level::Trace,
@@ -28,6 +35,8 @@ impl Severity {
             Severity::Critical => Level::Critical,
         }
     }
+
+    /// Sets `LevelFilter` to `drain`.
     pub fn set_level_filter<D: Drain>(&self, drain: D) -> LevelFilter<D> {
         LevelFilter::new(drain, self.as_level())
     }
@@ -38,13 +47,24 @@ impl Default for Severity {
     }
 }
 
-
+/// The format of log records.
+///
+/// # Examples
+///
+/// The default value:
+///
+/// ```
+/// use sloggers::types::Format;
+///
+/// assert_eq!(Format::default(), Format::Full);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Format {
-    #[serde(rename = "full")]
+    /// Full format.
     Full,
 
-    #[serde(rename = "compact")]
+    /// Compact format.
     Compact,
 }
 impl Default for Format {
@@ -53,24 +73,26 @@ impl Default for Format {
     }
 }
 
+/// Time Zone.
+///
+/// # Examples
+///
+/// The default value:
+///
+/// ```
+/// use sloggers::types::TimeZone;
+///
+/// assert_eq!(TimeZone::default(), TimeZone::Local);
+/// ```
+#[allow(missing_docs)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum Timezone {
-    #[serde(rename = "utc")]
+#[serde(rename_all = "lowercase")]
+pub enum TimeZone {
     Utc,
-
-    #[serde(rename = "local")]
     Local,
 }
-impl Default for Timezone {
+impl Default for TimeZone {
     fn default() -> Self {
-        Timezone::Local
-    }
-}
-impl Timezone {
-    pub fn to_timestamp_fn(&self) -> fn(&mut Write) -> io::Result<()> {
-        match *self {
-            Timezone::Utc => slog_term::timestamp_utc,
-            Timezone::Local => slog_term::timestamp_local,
-        }
+        TimeZone::Local
     }
 }

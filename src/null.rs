@@ -1,7 +1,11 @@
+//! Null logger.
 use slog::{Logger, Discard};
 
 use {Result, Build, Config};
 
+/// Null logger builder.
+///
+/// This will create a logger which discards all log records.
 #[derive(Debug)]
 pub struct NullLoggerBuilder;
 impl Build for NullLoggerBuilder {
@@ -11,6 +15,7 @@ impl Build for NullLoggerBuilder {
     }
 }
 
+/// The configuration of `NullLoggerBuilder`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NullLoggerConfig {}
 impl Config for NullLoggerConfig {

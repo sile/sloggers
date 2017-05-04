@@ -1,13 +1,50 @@
-//! This crate provides frequently used slog loggers and convenient functions.
+//! This crate provides frequently used
+//! [slog](https://github.com/slog-rs/slog) loggers and convenient functions.
 //!
 //! # Examples
 //!
-//! Createa a logger via `TerminalLoggerBuilder`:
+//! Creates a logger via `TerminalLoggerBuilder`:
 //!
 //! ```
-//! use sloggers::terminal::TerminalLoggerBuilder;
+//! #[macro_use]
+//! extern crate slog;
+//! extern crate sloggers;
+//!
+//! use sloggers::Build;
+//! use sloggers::terminal::{TerminalLoggerBuilder, Destination};
+//! use sloggers::types::Severity;
+//!
+//! # fn main() {
+//! let mut builder = TerminalLoggerBuilder::new();
+//! builder.level(Severity::Debug);
+//! builder.destination(Destination::Stderr);
+//!
+//! let logger = builder.build().unwrap();
+//! info!(logger, "Hello World!");
+//! # }
 //! ```
 //!
+//! Creates a logger from configuration text (TOML):
+//!
+//! ```
+//! #[macro_use]
+//! extern crate slog;
+//! extern crate sloggers;
+//!
+//! use sloggers::{Build, Config, LoggerConfig};
+//!
+//! # fn main() {
+//! let config = LoggerConfig::from_toml(r#"
+//! type = "terminal"
+//! level = "debug"
+//! destination = "stderr"
+//! "#).unwrap();
+//!
+//! let builder = config.try_into_builder().unwrap();
+//! let logger = builder.build().unwrap();
+//! info!(logger, "Hello World!");
+//! # }
+//! ```
 #![warn(missing_docs)]
 extern crate log;
 extern crate serde;
@@ -38,4 +75,5 @@ mod config;
 mod error;
 mod misc;
 
+/// A specialized `Result` type for this crate.
 pub type Result<T> = ::std::result::Result<T, Error>;

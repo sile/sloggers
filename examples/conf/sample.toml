@@ -1,5 +1,5 @@
 type = "terminal"
 format = "full"
-timezone = "local"
-destination = "stdout"
+#timezone = "local"
+#destination = "stdout"
 level = "debug"

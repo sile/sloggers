@@ -2,6 +2,16 @@
 name = "sloggers"
 version = "0.1.0"
 authors = ["Takeru Ohta <phjgt308@gmail.com>"]
+description = "This library provides frequently used slog loggers and convenient functions"
+documentation = "https://docs.rs/sloggers"
+homepage = "https://github.com/sile/sloggers"
+repository = "https://github.com/sile/sloggers"
+readme = "README.md"
+keywords = ["logger"]
+license = "MIT"
+
+[badges]
+travis-ci = {repository = "sile/sloggers"}
 
 [dependencies]
 log = "*"

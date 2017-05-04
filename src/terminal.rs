@@ -1,11 +1,11 @@
 use std::fmt::Debug;
-use std::io::{self, Write};
 use slog::{Logger, Drain, FnValue};
 use slog_async::Async;
-use slog_term::{self, TermDecorator, CompactFormat, FullFormat};
+use slog_term::{TermDecorator, CompactFormat, FullFormat};
 
-use {Result, Build, Config, Severity};
+use {Result, Build, Config};
 use misc::module_and_line;
+use types::{Format, Severity, Timezone};
 
 #[derive(Debug)]
 pub struct TerminalLoggerBuilder {
@@ -81,42 +81,6 @@ impl Build for TerminalLoggerBuilder {
             }
         };
         Ok(logger)
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum Format {
-    #[serde(rename = "full")]
-    Full,
-
-    #[serde(rename = "compact")]
-    Compact,
-}
-impl Default for Format {
-    fn default() -> Self {
-        Format::Full
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum Timezone {
-    #[serde(rename = "utc")]
-    Utc,
-
-    #[serde(rename = "local")]
-    Local,
-}
-impl Default for Timezone {
-    fn default() -> Self {
-        Timezone::Local
-    }
-}
-impl Timezone {
-    pub fn to_timestamp_fn(&self) -> fn(&mut Write) -> io::Result<()> {
-        match *self {
-            Timezone::Utc => slog_term::timestamp_utc,
-            Timezone::Local => slog_term::timestamp_local,
-        }
     }
 }
 

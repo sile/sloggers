@@ -6,9 +6,9 @@ use slog::{Logger, Drain, FnValue};
 use slog_async::Async;
 use slog_term::{PlainDecorator, CompactFormat, FullFormat};
 
-use {Result, Build, Config, Severity};
+use {Result, Build, Config};
 use misc::module_and_line;
-use terminal::{Format, Timezone};
+use types::{Severity, Format, Timezone};
 
 #[derive(Debug)]
 pub struct FileLoggerBuilder {

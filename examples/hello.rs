@@ -16,7 +16,7 @@ fn main() {
     let config_file = matches.value_of("CONFIG_FILE").unwrap();
 
     let config: LoggerConfig = track_try_unwrap!(tomlconv::from_toml_file(config_file));
-    let builder = track_try_unwrap!(config.try_into_builder());
+    let builder = track_try_unwrap!(config.try_to_builder());
     let logger = track_try_unwrap!(builder.build());
     info!(logger, "Hello World!");
 }

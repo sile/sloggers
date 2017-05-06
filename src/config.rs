@@ -1,4 +1,4 @@
-use serde::{Serialize, Deserialize};
+use slog::Logger;
 
 use {Result, Build, LoggerBuilder};
 use file::FileLoggerConfig;
@@ -6,12 +6,19 @@ use null::NullLoggerConfig;
 use terminal::TerminalLoggerConfig;
 
 /// Configuration of a logger builder.
-pub trait Config: Sized + Serialize + for<'a> Deserialize<'a> {
+pub trait Config {
     /// Logger builder.
     type Builder: Build;
 
     /// Makes a logger builder associated with this configuration.
-    fn try_into_builder(self) -> Result<Self::Builder>;
+    fn try_to_builder(&self) -> Result<Self::Builder>;
+
+    /// Builds a logger with this configuration.
+    fn build_logger(&self) -> Result<Logger> {
+        let builder = track_try!(self.try_to_builder());
+        let logger = track_try!(builder.build());
+        Ok(logger)
+    }
 }
 
 /// The configuration of `LoggerBuilder`.
@@ -83,11 +90,13 @@ pub enum LoggerConfig {
 }
 impl Config for LoggerConfig {
     type Builder = LoggerBuilder;
-    fn try_into_builder(self) -> Result<Self::Builder> {
-        match self {
-            LoggerConfig::File(c) => track!(c.try_into_builder()).map(LoggerBuilder::File),
-            LoggerConfig::Null(c) => track!(c.try_into_builder()).map(LoggerBuilder::Null),
-            LoggerConfig::Terminal(c) => track!(c.try_into_builder()).map(LoggerBuilder::Terminal),
+    fn try_to_builder(&self) -> Result<Self::Builder> {
+        match *self {
+            LoggerConfig::File(ref c) => track!(c.try_to_builder()).map(LoggerBuilder::File),
+            LoggerConfig::Null(ref c) => track!(c.try_to_builder()).map(LoggerBuilder::Null),
+            LoggerConfig::Terminal(ref c) => {
+                track!(c.try_to_builder()).map(LoggerBuilder::Terminal)
+            }
         }
     }
 }

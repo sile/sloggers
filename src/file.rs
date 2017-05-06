@@ -148,8 +148,8 @@ pub struct FileLoggerConfig {
 }
 impl Config for FileLoggerConfig {
     type Builder = FileLoggerBuilder;
-    fn try_into_builder(self) -> Result<Self::Builder> {
-        let mut builder = FileLoggerBuilder::new(self.path);
+    fn try_to_builder(&self) -> Result<Self::Builder> {
+        let mut builder = FileLoggerBuilder::new(&self.path);
         builder.level(self.level);
         builder.format(self.format);
         builder.timezone(self.timezone);

@@ -20,7 +20,7 @@ impl Build for NullLoggerBuilder {
 pub struct NullLoggerConfig {}
 impl Config for NullLoggerConfig {
     type Builder = NullLoggerBuilder;
-    fn try_into_builder(self) -> Result<Self::Builder> {
+    fn try_to_builder(&self) -> Result<Self::Builder> {
         Ok(NullLoggerBuilder)
     }
 }

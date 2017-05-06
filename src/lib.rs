@@ -41,8 +41,7 @@
 //! destination = "stderr"
 //! "#).unwrap();
 //!
-//! let builder = config.try_into_builder().unwrap();
-//! let logger = builder.build().unwrap();
+//! let logger = config.build_logger().unwrap();
 //! info!(logger, "Hello World!");
 //! # }
 //! ```

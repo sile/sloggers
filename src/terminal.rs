@@ -133,7 +133,7 @@ pub struct TerminalLoggerConfig {
 }
 impl Config for TerminalLoggerConfig {
     type Builder = TerminalLoggerBuilder;
-    fn try_into_builder(self) -> Result<Self::Builder> {
+    fn try_to_builder(&self) -> Result<Self::Builder> {
         let mut builder = TerminalLoggerBuilder::new();
         builder.level(self.level);
         builder.format(self.format);

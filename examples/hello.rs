@@ -2,11 +2,13 @@ extern crate clap;
 #[macro_use]
 extern crate slog;
 extern crate sloggers;
+extern crate tomlconv;
 #[macro_use]
 extern crate trackable;
 
 use clap::{App, Arg};
 use sloggers::{Build, Config, LoggerConfig};
+use tomlconv::FromToml;
 
 fn main() {
     let matches = App::new("hello")

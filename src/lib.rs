@@ -30,11 +30,13 @@
 //! #[macro_use]
 //! extern crate slog;
 //! extern crate sloggers;
+//! extern crate tomlconv;
 //!
 //! use sloggers::{Build, Config, LoggerConfig};
+//! use tomlconv::FromToml;
 //!
 //! # fn main() {
-//! let config = LoggerConfig::from_toml(r#"
+//! let config = LoggerConfig::from_toml_str(r#"
 //! type = "terminal"
 //! level = "debug"
 //! destination = "stderr"
@@ -56,7 +58,6 @@ extern crate slog_async;
 extern crate slog_term;
 extern crate slog_stdlog;
 extern crate slog_scope;
-extern crate toml;
 #[macro_use]
 extern crate trackable;
 

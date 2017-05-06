@@ -22,8 +22,8 @@ slog-async = "2"
 slog-term = "2"
 slog-scope = "3"
 slog-stdlog = "2"
-toml = "0.4"
 trackable = "0.1"
 
 [dev-dependencies]
 clap = "2"
+tomlconv = "0.1"

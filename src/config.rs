@@ -29,7 +29,7 @@ pub trait Config {
 ///
 /// ```
 /// extern crate sloggers;
-/// extern crate tomlconv;
+/// extern crate serdeconv;
 ///
 /// use sloggers::{Config, LoggerConfig};
 ///
@@ -37,7 +37,7 @@ pub trait Config {
 /// let toml = r#"
 /// type = "null"
 /// "#;
-/// let _config: LoggerConfig = tomlconv::from_toml_str(toml).unwrap();
+/// let _config: LoggerConfig = serdeconv::from_toml_str(toml).unwrap();
 /// # }
 /// ```
 ///
@@ -45,7 +45,7 @@ pub trait Config {
 ///
 /// ```
 /// extern crate sloggers;
-/// extern crate tomlconv;
+/// extern crate serdeconv;
 ///
 /// use sloggers::{Config, LoggerConfig};
 ///
@@ -54,7 +54,7 @@ pub trait Config {
 /// type = "terminal"
 /// level = "warning"
 /// "#;
-/// let _config: LoggerConfig = tomlconv::from_toml_str(toml).unwrap();
+/// let _config: LoggerConfig = serdeconv::from_toml_str(toml).unwrap();
 /// # }
 /// ```
 ///
@@ -62,7 +62,7 @@ pub trait Config {
 ///
 /// ```
 /// extern crate sloggers;
-/// extern crate tomlconv;
+/// extern crate serdeconv;
 ///
 /// use sloggers::{Config, LoggerConfig};
 ///
@@ -72,7 +72,7 @@ pub trait Config {
 /// path = "/path/to/file.log"
 /// timezone = "utc"
 /// "#;
-/// let _config: LoggerConfig = tomlconv::from_toml_str(toml).unwrap();
+/// let _config: LoggerConfig = serdeconv::from_toml_str(toml).unwrap();
 /// # }
 /// ```
 #[allow(missing_docs)]

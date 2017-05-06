@@ -30,12 +30,12 @@
 //! #[macro_use]
 //! extern crate slog;
 //! extern crate sloggers;
-//! extern crate tomlconv;
+//! extern crate serdeconv;
 //!
 //! use sloggers::{Build, Config, LoggerConfig};
 //!
 //! # fn main() {
-//! let config: LoggerConfig = tomlconv::from_toml_str(r#"
+//! let config: LoggerConfig = serdeconv::from_toml_str(r#"
 //! type = "terminal"
 //! level = "debug"
 //! destination = "stderr"

@@ -2,7 +2,7 @@ extern crate clap;
 #[macro_use]
 extern crate slog;
 extern crate sloggers;
-extern crate tomlconv;
+extern crate serdeconv;
 #[macro_use]
 extern crate trackable;
 
@@ -15,7 +15,7 @@ fn main() {
         .get_matches();
     let config_file = matches.value_of("CONFIG_FILE").unwrap();
 
-    let config: LoggerConfig = track_try_unwrap!(tomlconv::from_toml_file(config_file));
+    let config: LoggerConfig = track_try_unwrap!(serdeconv::from_toml_file(config_file));
     let builder = track_try_unwrap!(config.try_to_builder());
     let logger = track_try_unwrap!(builder.build());
     info!(logger, "Hello World!");

@@ -25,13 +25,12 @@ pub trait Config: Sized + Serialize + for<'a> Deserialize<'a> {
 /// extern crate tomlconv;
 ///
 /// use sloggers::{Config, LoggerConfig};
-/// use tomlconv::FromToml;
 ///
 /// # fn main() {
 /// let toml = r#"
 /// type = "null"
 /// "#;
-/// let _config = LoggerConfig::from_toml_str(toml).unwrap();
+/// let _config: LoggerConfig = tomlconv::from_toml_str(toml).unwrap();
 /// # }
 /// ```
 ///
@@ -42,14 +41,13 @@ pub trait Config: Sized + Serialize + for<'a> Deserialize<'a> {
 /// extern crate tomlconv;
 ///
 /// use sloggers::{Config, LoggerConfig};
-/// use tomlconv::FromToml;
 ///
 /// # fn main() {
 /// let toml = r#"
 /// type = "terminal"
 /// level = "warning"
 /// "#;
-/// let _config = LoggerConfig::from_toml_str(toml).unwrap();
+/// let _config: LoggerConfig = tomlconv::from_toml_str(toml).unwrap();
 /// # }
 /// ```
 ///
@@ -60,7 +58,6 @@ pub trait Config: Sized + Serialize + for<'a> Deserialize<'a> {
 /// extern crate tomlconv;
 ///
 /// use sloggers::{Config, LoggerConfig};
-/// use tomlconv::FromToml;
 ///
 /// # fn main() {
 /// let toml = r#"
@@ -68,7 +65,7 @@ pub trait Config: Sized + Serialize + for<'a> Deserialize<'a> {
 /// path = "/path/to/file.log"
 /// timezone = "utc"
 /// "#;
-/// let _config = LoggerConfig::from_toml_str(toml).unwrap();
+/// let _config: LoggerConfig = tomlconv::from_toml_str(toml).unwrap();
 /// # }
 /// ```
 #[allow(missing_docs)]

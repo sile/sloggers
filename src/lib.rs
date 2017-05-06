@@ -33,10 +33,9 @@
 //! extern crate tomlconv;
 //!
 //! use sloggers::{Build, Config, LoggerConfig};
-//! use tomlconv::FromToml;
 //!
 //! # fn main() {
-//! let config = LoggerConfig::from_toml_str(r#"
+//! let config: LoggerConfig = tomlconv::from_toml_str(r#"
 //! type = "terminal"
 //! level = "debug"
 //! destination = "stderr"

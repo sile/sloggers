@@ -2,6 +2,7 @@ sloggers
 ========
 
 [![Crates.io: sloggers](http://meritbadge.herokuapp.com/sloggers)](https://crates.io/crates/sloggers)
+[![Documentation](https://docs.rs/sloggers/badge.svg)](https://docs.rs/sloggers)
 [![Build Status](https://travis-ci.org/sile/sloggers.svg?branch=master)](https://travis-ci.org/sile/sloggers)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 

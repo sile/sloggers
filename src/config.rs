@@ -4,6 +4,7 @@ use {Result, Build, LoggerBuilder};
 use file::FileLoggerConfig;
 use null::NullLoggerConfig;
 use terminal::TerminalLoggerConfig;
+use types::Severity;
 
 /// Configuration of a logger builder.
 pub trait Config {
@@ -83,6 +84,16 @@ pub enum LoggerConfig {
     File(FileLoggerConfig),
     Null(NullLoggerConfig),
     Terminal(TerminalLoggerConfig),
+}
+impl LoggerConfig {
+    /// Sets the log level of this logger.
+    pub fn set_loglevel(&mut self, level: Severity) {
+        match *self {
+            LoggerConfig::File(ref mut c) => c.level = level,
+            LoggerConfig::Null(_) => {}
+            LoggerConfig::Terminal(ref mut c) => c.level = level,
+        }
+    }
 }
 impl Config for LoggerConfig {
     type Builder = LoggerBuilder;

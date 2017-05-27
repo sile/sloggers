@@ -78,14 +78,10 @@ pub trait Config {
 #[allow(missing_docs)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
+#[serde(rename_all = "lowercase")]
 pub enum LoggerConfig {
-    #[serde(rename = "file")]
     File(FileLoggerConfig),
-
-    #[serde(rename = "null")]
     Null(NullLoggerConfig),
-
-    #[serde(rename = "terminal")]
     Terminal(TerminalLoggerConfig),
 }
 impl Config for LoggerConfig {
@@ -98,5 +94,10 @@ impl Config for LoggerConfig {
                 track!(c.try_to_builder()).map(LoggerBuilder::Terminal)
             }
         }
+    }
+}
+impl Default for LoggerConfig {
+    fn default() -> Self {
+        LoggerConfig::Terminal(TerminalLoggerConfig::default())
     }
 }

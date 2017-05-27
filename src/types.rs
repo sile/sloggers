@@ -1,5 +1,8 @@
 //! Commonly used types.
+use std::str::FromStr;
 use slog::{Level, LevelFilter, Drain};
+
+use {Error, ErrorKind};
 
 /// The severity of a log record.
 ///
@@ -46,6 +49,20 @@ impl Default for Severity {
         Severity::Info
     }
 }
+impl FromStr for Severity {
+    type Err = Error;
+    fn from_str(s: &str) -> Result<Self, Error> {
+        match s {
+            "trace" => Ok(Severity::Trace),
+            "debug" => Ok(Severity::Debug),
+            "info" => Ok(Severity::Info),
+            "warning" => Ok(Severity::Warning),
+            "error" => Ok(Severity::Error),
+            "critical" => Ok(Severity::Error),
+            _ => track_panic!(ErrorKind::Invalid, "Undefined severity: {:?}", s),
+        }
+    }
+}
 
 /// The format of log records.
 ///
@@ -72,6 +89,16 @@ impl Default for Format {
         Format::Full
     }
 }
+impl FromStr for Format {
+    type Err = Error;
+    fn from_str(s: &str) -> Result<Self, Error> {
+        match s {
+            "full" => Ok(Format::Full),
+            "compact" => Ok(Format::Compact),
+            _ => track_panic!(ErrorKind::Invalid, "Undefined log format: {:?}", s),
+        }
+    }
+}
 
 /// Time Zone.
 ///
@@ -94,5 +121,15 @@ pub enum TimeZone {
 impl Default for TimeZone {
     fn default() -> Self {
         TimeZone::Local
+    }
+}
+impl FromStr for TimeZone {
+    type Err = Error;
+    fn from_str(s: &str) -> Result<Self, Error> {
+        match s {
+            "utc" => Ok(TimeZone::Utc),
+            "local" => Ok(TimeZone::Local),
+            _ => track_panic!(ErrorKind::Invalid, "Undefined time zone: {:?}", s),
+        }
     }
 }

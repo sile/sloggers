@@ -52,8 +52,9 @@ impl FileLoggerBuilder {
     }
 
     fn build_with_drain<D>(&self, drain: D) -> Logger
-        where D: Drain + Send + 'static,
-              D::Err: Debug
+    where
+        D: Drain + Send + 'static,
+        D::Err: Debug,
     {
         let drain = Async::default(drain.fuse()).fuse();
         let drain = self.level.set_level_filter(drain).fuse();
@@ -116,8 +117,10 @@ impl Write for FileAppender {
         if let Some(ref mut f) = self.file {
             f.write(buf)
         } else {
-            Err(io::Error::new(io::ErrorKind::Other,
-                               format!("Cannot open file: {:?}", self.path)))
+            Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!("Cannot open file: {:?}", self.path),
+            ))
         }
     }
     fn flush(&mut self) -> io::Result<()> {

@@ -21,8 +21,8 @@ slog-async = "2"
 slog-term = "2"
 slog-scope = "3"
 slog-stdlog = "2"
-trackable = "0.1"
+trackable = "0.2"
 
 [dev-dependencies]
 clap = "2"
-serdeconv = "0.2"
+serdeconv = "0.3"

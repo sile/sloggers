@@ -4,13 +4,13 @@ use slog_term;
 use slog_scope;
 use slog_stdlog;
 
-use Result;
+use {Result, Error};
 use types::TimeZone;
 
 /// Sets the logger for the log records emitted via `log` crate.
 pub fn set_stdlog_logger(logger: Logger) -> Result<()> {
     let _guard = slog_scope::set_global_logger(logger);
-    track_err!(slog_stdlog::init())
+    track!(slog_stdlog::init().map_err(Error::from))
 }
 
 pub fn module_and_line(record: &Record) -> String {

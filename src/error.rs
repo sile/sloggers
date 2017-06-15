@@ -1,12 +1,22 @@
 use std::io;
 use log;
-use trackable::error::{TrackableError, IntoTrackableError};
+use trackable::error::TrackableError;
 use trackable::error::{ErrorKind as TrackableErrorKind, ErrorKindExt};
 
-
 /// The error type for this crate.
-pub type Error = TrackableError<ErrorKind>;
-
+#[derive(Debug, Clone)]
+pub struct Error(TrackableError<ErrorKind>);
+derive_traits_for_trackable_error_newtype!(Error, ErrorKind);
+impl From<io::Error> for Error {
+    fn from(f: io::Error) -> Self {
+        ErrorKind::Other.cause(f).into()
+    }
+}
+impl From<log::SetLoggerError> for Error {
+    fn from(f: log::SetLoggerError) -> Self {
+        ErrorKind::Other.cause(f).into()
+    }
+}
 
 /// A list of error kinds.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -18,13 +28,3 @@ pub enum ErrorKind {
     Other,
 }
 impl TrackableErrorKind for ErrorKind {}
-impl IntoTrackableError<io::Error> for ErrorKind {
-    fn into_trackable_error(e: io::Error) -> Error {
-        ErrorKind::Other.cause(e)
-    }
-}
-impl IntoTrackableError<log::SetLoggerError> for ErrorKind {
-    fn into_trackable_error(e: log::SetLoggerError) -> Error {
-        ErrorKind::Other.cause(e)
-    }
-}

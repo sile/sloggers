@@ -16,8 +16,8 @@ pub trait Config {
 
     /// Builds a logger with this configuration.
     fn build_logger(&self) -> Result<Logger> {
-        let builder = track_try!(self.try_to_builder());
-        let logger = track_try!(builder.build());
+        let builder = track!(self.try_to_builder())?;
+        let logger = track!(builder.build())?;
         Ok(logger)
     }
 }

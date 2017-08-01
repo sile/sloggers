@@ -32,7 +32,7 @@
 //! extern crate sloggers;
 //! extern crate serdeconv;
 //!
-//! use sloggers::{Build, Config, LoggerConfig};
+//! use sloggers::{Config, LoggerConfig};
 //!
 //! # fn main() {
 //! let config: LoggerConfig = serdeconv::from_toml_str(r#"

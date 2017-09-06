@@ -12,12 +12,15 @@ use misc::{module_and_line, timezone_to_timestamp_fn};
 use types::{Severity, Format, TimeZone};
 
 /// A logger builder which build loggers that write log records to the specified file.
+///
+/// The resulting logger will work asynchronously (the default channel size is 1024).
 #[derive(Debug)]
 pub struct FileLoggerBuilder {
     format: Format,
     timezone: TimeZone,
     level: Severity,
     appender: FileAppender,
+    channel_size: usize,
 }
 impl FileLoggerBuilder {
     /// Makes a new `FileLoggerBuilder` instance.
@@ -30,6 +33,7 @@ impl FileLoggerBuilder {
             timezone: TimeZone::default(),
             level: Severity::default(),
             appender: FileAppender::new(path),
+            channel_size: 1024,
         }
     }
 
@@ -51,12 +55,21 @@ impl FileLoggerBuilder {
         self
     }
 
+    /// Sets the size of the asynchronous channel of this logger.
+    pub fn channel_size(&mut self, channel_size: usize) -> &mut Self {
+        self.channel_size = channel_size;
+        self
+    }
+
     fn build_with_drain<D>(&self, drain: D) -> Logger
     where
         D: Drain + Send + 'static,
         D::Err: Debug,
     {
-        let drain = Async::default(drain.fuse()).fuse();
+        let drain = Async::new(drain.fuse())
+            .chan_size(self.channel_size)
+            .build()
+            .fuse();
         let drain = self.level.set_level_filter(drain).fuse();
         Logger::root(drain, o!("module" => FnValue(module_and_line)))
     }
@@ -148,6 +161,10 @@ pub struct FileLoggerConfig {
 
     /// Log file path.
     pub path: PathBuf,
+
+    /// Asynchronous channel size
+    #[serde(default = "default_channel_size")]
+    pub channel_size: usize,
 }
 impl Config for FileLoggerConfig {
     type Builder = FileLoggerBuilder;
@@ -156,6 +173,11 @@ impl Config for FileLoggerConfig {
         builder.level(self.level);
         builder.format(self.format);
         builder.timezone(self.timezone);
+        builder.channel_size(self.channel_size);
         Ok(builder)
     }
+}
+
+fn default_channel_size() -> usize {
+    1024
 }

@@ -9,12 +9,15 @@ use misc::{module_and_line, timezone_to_timestamp_fn};
 use types::{Format, Severity, TimeZone};
 
 /// A logger builder which build loggers that output log records to the terminal.
+///
+/// The resulting logger will work asynchronously (the default channel size is 1024).
 #[derive(Debug)]
 pub struct TerminalLoggerBuilder {
     format: Format,
     timezone: TimeZone,
     destination: Destination,
     level: Severity,
+    channel_size: usize,
 }
 impl TerminalLoggerBuilder {
     /// Makes a new `TerminalLoggerBuilder` instance.
@@ -24,6 +27,7 @@ impl TerminalLoggerBuilder {
             timezone: TimeZone::default(),
             destination: Destination::default(),
             level: Severity::default(),
+            channel_size: 1024,
         }
     }
 
@@ -51,12 +55,21 @@ impl TerminalLoggerBuilder {
         self
     }
 
+    /// Sets the size of the asynchronous channel of this logger.
+    pub fn channel_size(&mut self, channel_size: usize) -> &mut Self {
+        self.channel_size = channel_size;
+        self
+    }
+
     fn build_with_drain<D>(&self, drain: D) -> Logger
     where
         D: Drain + Send + 'static,
         D::Err: Debug,
     {
-        let drain = Async::default(drain.fuse()).fuse();
+        let drain = Async::new(drain.fuse())
+            .chan_size(self.channel_size)
+            .build()
+            .fuse();
         let drain = self.level.set_level_filter(drain).fuse();
         Logger::root(drain, o!("module" => FnValue(module_and_line)))
     }
@@ -131,6 +144,10 @@ pub struct TerminalLoggerConfig {
     /// Output destination.
     #[serde(default)]
     pub destination: Destination,
+
+    /// Asynchronous channel size
+    #[serde(default = "default_channel_size")]
+    pub channel_size: usize,
 }
 impl Config for TerminalLoggerConfig {
     type Builder = TerminalLoggerBuilder;
@@ -140,6 +157,11 @@ impl Config for TerminalLoggerConfig {
         builder.format(self.format);
         builder.timezone(self.timezone);
         builder.destination(self.destination);
+        builder.channel_size(self.channel_size);
         Ok(builder)
     }
+}
+
+fn default_channel_size() -> usize {
+    1024
 }

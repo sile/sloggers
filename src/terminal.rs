@@ -1,8 +1,9 @@
 //! Terminal logger.
 use std::fmt::Debug;
-use slog::{Logger, Drain, FnValue};
+use std::io;
+use slog::{self, Logger, Drain, FnValue};
 use slog_async::Async;
-use slog_term::{TermDecorator, CompactFormat, FullFormat};
+use slog_term::{self, TermDecorator, PlainDecorator, CompactFormat, FullFormat};
 
 use {Result, Build, Config};
 use misc::{module_and_line, timezone_to_timestamp_fn};
@@ -81,7 +82,7 @@ impl Default for TerminalLoggerBuilder {
 }
 impl Build for TerminalLoggerBuilder {
     fn build(&self) -> Result<Logger> {
-        let decorator = self.destination.to_term_decorator();
+        let decorator = self.destination.to_decorator();
         let timestamp = timezone_to_timestamp_fn(self.timezone);
         let logger = match self.format {
             Format::Full => {
@@ -123,10 +124,39 @@ impl Default for Destination {
     }
 }
 impl Destination {
-    fn to_term_decorator(&self) -> TermDecorator {
+    fn to_decorator(&self) -> Decorator {
+        let maybe_term_decorator = match *self {
+            Destination::Stdout => TermDecorator::new().stdout().try_build(),
+            Destination::Stderr => TermDecorator::new().stderr().try_build(),
+        };
+        maybe_term_decorator.map(Decorator::Term).unwrap_or_else(
+            || match *self {
+                Destination::Stdout => Decorator::PlainStdout(PlainDecorator::new(io::stdout())),
+                Destination::Stderr => Decorator::PlainStderr(PlainDecorator::new(io::stderr())),
+            },
+        )
+    }
+}
+
+enum Decorator {
+    Term(TermDecorator),
+    PlainStdout(PlainDecorator<io::Stdout>),
+    PlainStderr(PlainDecorator<io::Stderr>),
+}
+impl slog_term::Decorator for Decorator {
+    fn with_record<F>(
+        &self,
+        record: &slog::Record,
+        logger_values: &slog::OwnedKVList,
+        f: F,
+    ) -> io::Result<()>
+    where
+        F: FnOnce(&mut slog_term::RecordDecorator) -> io::Result<()>,
+    {
         match *self {
-            Destination::Stdout => TermDecorator::new().stdout().build(),
-            Destination::Stderr => TermDecorator::new().stderr().build(),
+            Decorator::Term(ref d) => d.with_record(record, logger_values, f),
+            Decorator::PlainStdout(ref d) => d.with_record(record, logger_values, f),
+            Decorator::PlainStderr(ref d) => d.with_record(record, logger_values, f),
         }
     }
 }

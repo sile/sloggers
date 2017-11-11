@@ -74,6 +74,11 @@ impl TerminalLoggerBuilder {
         Logger::root(drain, o!("module" => FnValue(module_and_line)))
     }
 }
+impl Default for TerminalLoggerBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 impl Build for TerminalLoggerBuilder {
     fn build(&self) -> Result<Logger> {
         let decorator = self.destination.to_term_decorator();

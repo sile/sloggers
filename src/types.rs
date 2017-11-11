@@ -58,7 +58,7 @@ impl FromStr for Severity {
             "info" => Ok(Severity::Info),
             "warning" => Ok(Severity::Warning),
             "error" => Ok(Severity::Error),
-            "critical" => Ok(Severity::Error),
+            "critical" => Ok(Severity::Critical),
             _ => track_panic!(ErrorKind::Invalid, "Undefined severity: {:?}", s),
         }
     }

@@ -19,8 +19,8 @@ serde_derive = "1"
 slog = "2"
 slog-async = "2"
 slog-term = "2"
-slog-scope = "3"
-slog-stdlog = "2"
+slog-scope = "4"
+slog-stdlog = "3"
 trackable = "0.2"
 
 [dev-dependencies]

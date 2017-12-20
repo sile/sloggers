@@ -1,6 +1,6 @@
 [package]
 name = "sloggers"
-version = "0.2.2"
+version = "0.2.3"
 authors = ["Takeru Ohta <phjgt308@gmail.com>"]
 description = "This library provides frequently used slog loggers and convenient functions"
 homepage = "https://github.com/sile/sloggers"

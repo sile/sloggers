@@ -1,7 +1,7 @@
 //! Null logger.
-use slog::{Logger, Discard};
+use slog::{Discard, Logger};
 
-use {Result, Build, Config};
+use {Build, Config, Result};
 
 /// Null logger builder.
 ///

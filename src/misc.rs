@@ -4,7 +4,7 @@ use slog_term;
 use slog_scope;
 use slog_stdlog;
 
-use {Result, Error};
+use {Error, Result};
 use types::TimeZone;
 
 /// Sets the logger for the log records emitted via `log` crate.

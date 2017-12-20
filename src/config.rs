@@ -1,6 +1,6 @@
 use slog::Logger;
 
-use {Result, Build, LoggerBuilder};
+use {Build, LoggerBuilder, Result};
 use file::FileLoggerConfig;
 use null::NullLoggerConfig;
 use terminal::TerminalLoggerConfig;

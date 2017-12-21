@@ -1,11 +1,11 @@
 //! Terminal logger.
 use std::fmt::Debug;
 use std::io;
-use slog::{self, Logger, Drain, FnValue};
+use slog::{self, Drain, FnValue, Logger};
 use slog_async::Async;
-use slog_term::{self, TermDecorator, PlainDecorator, CompactFormat, FullFormat};
+use slog_term::{self, CompactFormat, FullFormat, PlainDecorator, TermDecorator};
 
-use {Result, Build, Config};
+use {Build, Config, Result};
 use misc::{module_and_line, timezone_to_timestamp_fn};
 use types::{Format, Severity, TimeZone};
 
@@ -129,12 +129,12 @@ impl Destination {
             Destination::Stdout => TermDecorator::new().stdout().try_build(),
             Destination::Stderr => TermDecorator::new().stderr().try_build(),
         };
-        maybe_term_decorator.map(Decorator::Term).unwrap_or_else(
-            || match *self {
+        maybe_term_decorator
+            .map(Decorator::Term)
+            .unwrap_or_else(|| match *self {
                 Destination::Stdout => Decorator::PlainStdout(PlainDecorator::new(io::stdout())),
                 Destination::Stderr => Decorator::PlainStderr(PlainDecorator::new(io::stderr())),
-            },
-        )
+            })
     }
 }
 

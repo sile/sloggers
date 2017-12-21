@@ -3,13 +3,13 @@ use std::fmt::Debug;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
-use slog::{Logger, Drain, FnValue};
+use slog::{Drain, FnValue, Logger};
 use slog_async::Async;
-use slog_term::{PlainDecorator, CompactFormat, FullFormat};
+use slog_term::{CompactFormat, FullFormat, PlainDecorator};
 
-use {Result, Build, Config};
+use {Build, Config, Result};
 use misc::{module_and_line, timezone_to_timestamp_fn};
-use types::{Severity, Format, TimeZone};
+use types::{Format, Severity, TimeZone};
 
 /// A logger builder which build loggers that write log records to the specified file.
 ///

@@ -61,8 +61,8 @@ impl FileLoggerBuilder {
         self
     }
 
-    /// By default, logger just appends the log messages to file.
-    /// If this method called, when opening the file logger truncate it to 0 length.
+    /// By default, logger just appends log messages to file.
+    /// If this method called, logger truncates the file to 0 length when opening.
     pub fn truncate(&mut self) -> &mut Self {
         self.appender.truncate = true;
         self
@@ -181,6 +181,7 @@ pub struct FileLoggerConfig {
     pub channel_size: usize,
 
     /// Truncate the file or not
+    #[serde(default)]
     pub truncate: bool,
 }
 impl Config for FileLoggerConfig {

@@ -72,7 +72,6 @@ pub trait Config {
 /// type = "file"
 /// path = "/path/to/file.log"
 /// timezone = "utc"
-/// truncate = false
 /// "#;
 /// let _config: LoggerConfig = serdeconv::from_toml_str(toml).unwrap();
 /// # }

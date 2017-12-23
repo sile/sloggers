@@ -67,7 +67,7 @@ impl FileLoggerBuilder {
         self.appender.truncate = true;
         self
     }
-    
+
     fn build_with_drain<D>(&self, drain: D) -> Logger
     where
         D: Drain + Send + 'static,

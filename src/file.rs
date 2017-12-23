@@ -61,6 +61,13 @@ impl FileLoggerBuilder {
         self
     }
 
+    /// By default, logger just appends log messages to file.
+    /// If this method called, logger truncates the file to 0 length when opening.
+    pub fn truncate(&mut self) -> &mut Self {
+        self.appender.truncate = true;
+        self
+    }
+    
     fn build_with_drain<D>(&self, drain: D) -> Logger
     where
         D: Drain + Send + 'static,
@@ -96,12 +103,14 @@ impl Build for FileLoggerBuilder {
 struct FileAppender {
     path: PathBuf,
     file: Option<File>,
+    truncate: bool,
 }
 impl Clone for FileAppender {
     fn clone(&self) -> Self {
         FileAppender {
             path: self.path.clone(),
             file: None,
+            truncate: self.truncate,
         }
     }
 }
@@ -110,13 +119,18 @@ impl FileAppender {
         FileAppender {
             path: path.as_ref().to_path_buf(),
             file: None,
+            truncate: false,
         }
     }
     fn reopen_if_needed(&mut self) -> io::Result<()> {
         if !self.path.exists() || self.file.is_none() {
-            let file = OpenOptions::new()
-                .create(true)
-                .append(true)
+            let mut file_builder = OpenOptions::new();
+            file_builder.create(true);
+            if self.truncate {
+                file_builder.truncate(true);
+            }
+            let file = file_builder
+                .append(!self.truncate)
                 .write(true)
                 .open(&self.path)?;
             self.file = Some(file);
@@ -165,6 +179,10 @@ pub struct FileLoggerConfig {
     /// Asynchronous channel size
     #[serde(default = "default_channel_size")]
     pub channel_size: usize,
+
+    /// Truncate the file or not
+    #[serde(default)]
+    pub truncate: bool,
 }
 impl Config for FileLoggerConfig {
     type Builder = FileLoggerBuilder;
@@ -174,6 +192,9 @@ impl Config for FileLoggerConfig {
         builder.format(self.format);
         builder.timezone(self.timezone);
         builder.channel_size(self.channel_size);
+        if self.truncate {
+            builder.truncate();
+        }
         Ok(builder)
     }
 }

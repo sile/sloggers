@@ -7,7 +7,7 @@ use slog_term::{self, CompactFormat, FullFormat, PlainDecorator, TermDecorator};
 
 use {Build, Config, Result};
 use misc::{module_and_line, timezone_to_timestamp_fn};
-use types::{Format, Severity, TimeZone};
+use types::{Format, Severity, SourceLocation, TimeZone};
 
 /// A logger builder which build loggers that output log records to the terminal.
 ///
@@ -15,6 +15,7 @@ use types::{Format, Severity, TimeZone};
 #[derive(Debug)]
 pub struct TerminalLoggerBuilder {
     format: Format,
+    source_location: SourceLocation,
     timezone: TimeZone,
     destination: Destination,
     level: Severity,
@@ -25,6 +26,7 @@ impl TerminalLoggerBuilder {
     pub fn new() -> Self {
         TerminalLoggerBuilder {
             format: Format::default(),
+            source_location: SourceLocation::default(),
             timezone: TimeZone::default(),
             destination: Destination::default(),
             level: Severity::default(),
@@ -35,6 +37,12 @@ impl TerminalLoggerBuilder {
     /// Sets the format of log records.
     pub fn format(&mut self, format: Format) -> &mut Self {
         self.format = format;
+        self
+    }
+
+    /// Sets the source code location type this logger will use.
+    pub fn source_location(&mut self, source_location: SourceLocation) -> &mut Self {
+        self.source_location = source_location;
         self
     }
 
@@ -72,7 +80,15 @@ impl TerminalLoggerBuilder {
             .build()
             .fuse();
         let drain = self.level.set_level_filter(drain).fuse();
-        Logger::root(drain, o!("module" => FnValue(module_and_line)))
+        
+        let logger = match self.source_location {
+            SourceLocation::None => Logger::root(drain, o!()),
+            SourceLocation::ModuleAndLine => {
+                Logger::root(drain, o!("module" => FnValue(module_and_line)))
+            }
+        };
+
+        logger
     }
 }
 impl Default for TerminalLoggerBuilder {
@@ -172,6 +188,10 @@ pub struct TerminalLoggerConfig {
     #[serde(default)]
     pub format: Format,
 
+    /// Source code location
+    #[serde(default)]
+    pub source_location: SourceLocation,
+
     /// Time Zone.
     #[serde(default)]
     pub timezone: TimeZone,
@@ -190,6 +210,7 @@ impl Config for TerminalLoggerConfig {
         let mut builder = TerminalLoggerBuilder::new();
         builder.level(self.level);
         builder.format(self.format);
+        builder.source_location(self.source_location);
         builder.timezone(self.timezone);
         builder.destination(self.destination);
         builder.channel_size(self.channel_size);

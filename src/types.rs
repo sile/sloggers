@@ -133,3 +133,39 @@ impl FromStr for TimeZone {
         }
     }
 }
+
+/// SourceLocation
+///
+/// # Examples
+///
+/// The default value:
+///
+/// ```
+/// use sloggers::types::SourceLocation;
+///
+/// assert_eq!(SourceLocation::default(), SourceLocation::ModuleAndLine);
+/// ```
+#[allow(missing_docs)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SourceLocation {
+    None,
+    ModuleAndLine,
+}
+
+impl Default for SourceLocation {
+    fn default() -> Self {
+        SourceLocation::ModuleAndLine
+    }
+}
+
+impl FromStr for SourceLocation {
+    type Err = Error;
+    fn from_str(s: &str) -> Result<Self, Error> {
+        match s {
+            "none" => Ok(SourceLocation::None),
+            "module_and_line" => Ok(SourceLocation::ModuleAndLine),
+            _ => track_panic!(ErrorKind::Invalid, "Undefined source code location: {:?}", s),
+        }
+    }
+}

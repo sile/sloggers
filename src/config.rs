@@ -32,7 +32,7 @@ pub trait Config {
 /// extern crate sloggers;
 /// extern crate serdeconv;
 ///
-/// use sloggers::{Config, LoggerConfig};
+/// use sloggers::LoggerConfig;
 ///
 /// # fn main() {
 /// let toml = r#"
@@ -48,7 +48,7 @@ pub trait Config {
 /// extern crate sloggers;
 /// extern crate serdeconv;
 ///
-/// use sloggers::{Config, LoggerConfig};
+/// use sloggers::LoggerConfig;
 ///
 /// # fn main() {
 /// let toml = r#"
@@ -65,7 +65,7 @@ pub trait Config {
 /// extern crate sloggers;
 /// extern crate serdeconv;
 ///
-/// use sloggers::{Config, LoggerConfig};
+/// use sloggers::LoggerConfig;
 ///
 /// # fn main() {
 /// let toml = r#"

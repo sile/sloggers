@@ -9,7 +9,7 @@ use slog_term::{CompactFormat, FullFormat, PlainDecorator};
 
 use {Build, Config, Result};
 use misc::{module_and_line, timezone_to_timestamp_fn};
-use types::{Format, Severity, TimeZone};
+use types::{Format, SourceLocation, Severity, TimeZone};
 
 /// A logger builder which build loggers that write log records to the specified file.
 ///
@@ -17,6 +17,7 @@ use types::{Format, Severity, TimeZone};
 #[derive(Debug)]
 pub struct FileLoggerBuilder {
     format: Format,
+    source_location: SourceLocation,
     timezone: TimeZone,
     level: Severity,
     appender: FileAppender,
@@ -30,6 +31,7 @@ impl FileLoggerBuilder {
     pub fn new<P: AsRef<Path>>(path: P) -> Self {
         FileLoggerBuilder {
             format: Format::default(),
+            source_location: SourceLocation::default(),
             timezone: TimeZone::default(),
             level: Severity::default(),
             appender: FileAppender::new(path),
@@ -40,6 +42,12 @@ impl FileLoggerBuilder {
     /// Sets the format of log records.
     pub fn format(&mut self, format: Format) -> &mut Self {
         self.format = format;
+        self
+    }
+
+    /// Sets the source code location type this logger will use.
+    pub fn source_location(&mut self, source_location: SourceLocation) -> &mut Self {
+        self.source_location = source_location;
         self
     }
 
@@ -77,8 +85,17 @@ impl FileLoggerBuilder {
             .chan_size(self.channel_size)
             .build()
             .fuse();
+
         let drain = self.level.set_level_filter(drain).fuse();
-        Logger::root(drain, o!("module" => FnValue(module_and_line)))
+
+        let logger = match self.source_location {
+            SourceLocation::None => Logger::root(drain, o!()),
+            SourceLocation::ModuleAndLine => {
+                Logger::root(drain, o!("module" => FnValue(module_and_line)))
+            }
+        };
+        
+        logger
     }
 }
 impl Build for FileLoggerBuilder {
@@ -169,6 +186,10 @@ pub struct FileLoggerConfig {
     #[serde(default)]
     pub format: Format,
 
+    /// Source code location
+    #[serde(default)]
+    pub source_location: SourceLocation,
+
     /// Time Zone.
     #[serde(default)]
     pub timezone: TimeZone,
@@ -190,6 +211,7 @@ impl Config for FileLoggerConfig {
         let mut builder = FileLoggerBuilder::new(&self.path);
         builder.level(self.level);
         builder.format(self.format);
+        builder.source_location(self.source_location);
         builder.timezone(self.timezone);
         builder.channel_size(self.channel_size);
         if self.truncate {

@@ -9,7 +9,7 @@ use slog_term::{CompactFormat, FullFormat, PlainDecorator};
 
 use {Build, Config, Result};
 use misc::{module_and_line, timezone_to_timestamp_fn};
-use types::{Format, SourceLocation, Severity, TimeZone};
+use types::{Format, Severity, SourceLocation, TimeZone};
 
 /// A logger builder which build loggers that write log records to the specified file.
 ///
@@ -94,7 +94,7 @@ impl FileLoggerBuilder {
                 Logger::root(drain, o!("module" => FnValue(module_and_line)))
             }
         };
-        
+
         logger
     }
 }

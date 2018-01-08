@@ -165,7 +165,11 @@ impl FromStr for SourceLocation {
         match s {
             "none" => Ok(SourceLocation::None),
             "module_and_line" => Ok(SourceLocation::ModuleAndLine),
-            _ => track_panic!(ErrorKind::Invalid, "Undefined source code location: {:?}", s),
+            _ => track_panic!(
+                ErrorKind::Invalid,
+                "Undefined source code location: {:?}",
+                s
+            ),
         }
     }
 }

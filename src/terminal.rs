@@ -81,14 +81,12 @@ impl TerminalLoggerBuilder {
             .fuse();
         let drain = self.level.set_level_filter(drain).fuse();
 
-        let logger = match self.source_location {
+        match self.source_location {
             SourceLocation::None => Logger::root(drain, o!()),
             SourceLocation::ModuleAndLine => {
                 Logger::root(drain, o!("module" => FnValue(module_and_line)))
             }
-        };
-
-        logger
+        }
     }
 }
 impl Default for TerminalLoggerBuilder {

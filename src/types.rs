@@ -134,7 +134,7 @@ impl FromStr for TimeZone {
     }
 }
 
-/// SourceLocation
+/// Source Location.
 ///
 /// # Examples
 ///
@@ -152,13 +152,11 @@ pub enum SourceLocation {
     None,
     ModuleAndLine,
 }
-
 impl Default for SourceLocation {
     fn default() -> Self {
         SourceLocation::ModuleAndLine
     }
 }
-
 impl FromStr for SourceLocation {
     type Err = Error;
     fn from_str(s: &str) -> Result<Self, Error> {

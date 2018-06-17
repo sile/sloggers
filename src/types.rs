@@ -1,6 +1,6 @@
 //! Commonly used types.
-use std::str::FromStr;
 use slog::{Drain, Level, LevelFilter};
+use std::str::FromStr;
 
 use {Error, ErrorKind};
 

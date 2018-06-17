@@ -1,10 +1,10 @@
 use slog::Logger;
 
-use {Build, LoggerBuilder, Result};
 use file::FileLoggerConfig;
 use null::NullLoggerConfig;
 use terminal::TerminalLoggerConfig;
 use types::Severity;
+use {Build, LoggerBuilder, Result};
 
 /// Configuration of a logger builder.
 pub trait Config {

@@ -1,12 +1,12 @@
-use std::io;
 use slog::{Logger, Record};
-use slog_term;
 use slog_scope;
 use slog_stdlog;
+use slog_term;
+use std::io;
 use trackable::error::ErrorKindExt;
 
-use {ErrorKind, Result};
 use types::TimeZone;
+use {ErrorKind, Result};
 
 /// Sets the logger for the log records emitted via `log` crate.
 pub fn set_stdlog_logger(logger: Logger) -> Result<()> {

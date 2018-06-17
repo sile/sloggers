@@ -1,15 +1,15 @@
 //! File logger.
+use slog::{Drain, FnValue, Logger};
+use slog_async::Async;
+use slog_term::{CompactFormat, FullFormat, PlainDecorator};
 use std::fmt::Debug;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
-use slog::{Drain, FnValue, Logger};
-use slog_async::Async;
-use slog_term::{CompactFormat, FullFormat, PlainDecorator};
 
-use {Build, Config, Result};
 use misc::{module_and_line, timezone_to_timestamp_fn};
 use types::{Format, Severity, SourceLocation, TimeZone};
+use {Build, Config, Result};
 
 /// A logger builder which build loggers that write log records to the specified file.
 ///

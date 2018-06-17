@@ -1,9 +1,9 @@
 use slog::Logger;
 
-use Result;
 use file::FileLoggerBuilder;
 use null::NullLoggerBuilder;
 use terminal::TerminalLoggerBuilder;
+use Result;
 
 /// This trait allows to build a logger instance.
 pub trait Build {

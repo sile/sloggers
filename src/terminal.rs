@@ -1,13 +1,13 @@
 //! Terminal logger.
-use std::fmt::Debug;
-use std::io;
 use slog::{self, Drain, FnValue, Logger};
 use slog_async::Async;
 use slog_term::{self, CompactFormat, FullFormat, PlainDecorator, TermDecorator};
+use std::fmt::Debug;
+use std::io;
 
-use {Build, Config, Result};
 use misc::{module_and_line, timezone_to_timestamp_fn};
 use types::{Format, Severity, SourceLocation, TimeZone};
+use {Build, Config, Result};
 
 /// A logger builder which build loggers that output log records to the terminal.
 ///

@@ -15,6 +15,14 @@ use {Error, ErrorKind};
 ///
 /// assert_eq!(Severity::default(), Severity::Info);
 /// ```
+///
+/// # Notice
+///
+/// By default, `slog` disables trace level logging in debug builds,
+/// and trace and debug level logging in release builds.
+/// For enabling them, you need to specify some features (e.g, `max_level_trace`) to `slog`.
+///
+/// See [slog's documentation](https://docs.rs/slog/2.2.3/slog/#notable-details) for more details.
 #[allow(missing_docs)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]

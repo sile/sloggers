@@ -1,6 +1,7 @@
 //! File logger.
 use slog::{Drain, FnValue, Logger};
 use slog_async::Async;
+use slog_kvfilter::{KVFilter, KVFilterList};
 use slog_term::{CompactFormat, FullFormat, PlainDecorator};
 use std::fmt::Debug;
 use std::fs::{File, OpenOptions};
@@ -9,6 +10,7 @@ use std::path::{Path, PathBuf};
 
 use misc::{module_and_line, timezone_to_timestamp_fn};
 use types::{Format, Severity, SourceLocation, TimeZone};
+use misc::KVFilterParameters;
 use {Build, Config, Result};
 
 /// A logger builder which build loggers that write log records to the specified file.
@@ -22,6 +24,7 @@ pub struct FileLoggerBuilder {
     level: Severity,
     appender: FileAppender,
     channel_size: usize,
+    kvfilterparameters: Option<KVFilterParameters>,
 }
 impl FileLoggerBuilder {
     /// Makes a new `FileLoggerBuilder` instance.
@@ -36,6 +39,7 @@ impl FileLoggerBuilder {
             level: Severity::default(),
             appender: FileAppender::new(path),
             channel_size: 1024,
+            kvfilterparameters: None,
         }
     }
 
@@ -69,6 +73,19 @@ impl FileLoggerBuilder {
         self
     }
 
+    /// Sets KVFilter
+    pub fn kvfilter(&mut self,
+                    level: Severity,
+                    only_pass_any_on_all_keys: Option<KVFilterList>,
+                    always_suppress_any: Option<KVFilterList>) -> &mut Self {
+        self.kvfilterparameters = Some(KVFilterParameters {
+            severity: level,
+            only_pass_any_on_all_keys,
+            always_suppress_any
+        });
+        self
+    }
+
     /// By default, logger just appends log messages to file.
     /// If this method called, logger truncates the file to 0 length when opening.
     pub fn truncate(&mut self) -> &mut Self {
@@ -81,32 +98,51 @@ impl FileLoggerBuilder {
         D: Drain + Send + 'static,
         D::Err: Debug,
     {
-        let drain = Async::new(drain.fuse())
-            .chan_size(self.channel_size)
-            .build()
-            .fuse();
 
-        let drain = self.level.set_level_filter(drain).fuse();
+        fn finalfuse<D>(pars: &FileLoggerBuilder, drain: D) -> Logger
+        where
+            D: Drain + Send + 'static,
+            D::Err: Debug {
+            let drain = Async::new(drain.fuse())
+                .chan_size(pars.channel_size)
+                .build()
+                .fuse();
 
-        match self.source_location {
-            SourceLocation::None => Logger::root(drain, o!()),
-            SourceLocation::ModuleAndLine => {
-                Logger::root(drain, o!("module" => FnValue(module_and_line)))
+            let drain = pars.level.set_level_filter(drain).fuse();
+
+            match pars.source_location {
+                SourceLocation::None => Logger::root(drain, o!()),
+                SourceLocation::ModuleAndLine => {
+                    Logger::root(drain, o!("module" => FnValue(module_and_line)))
+                }
             }
+        }
+
+        if let Some(ref p) = self.kvfilterparameters {
+            let kvdrain = KVFilter::new(drain, p.severity.as_level())
+                .always_suppress_any(p.always_suppress_any.clone())
+                .only_pass_any_on_all_keys(p.only_pass_any_on_all_keys.clone());
+
+            finalfuse(self,kvdrain)
+        } else {
+            finalfuse(self,drain)
         }
     }
 }
+
 impl Build for FileLoggerBuilder {
     fn build(&self) -> Result<Logger> {
         let decorator = PlainDecorator::new(self.appender.clone());
         let timestamp = timezone_to_timestamp_fn(self.timezone);
         let logger = match self.format {
             Format::Full => {
-                let format = FullFormat::new(decorator).use_custom_timestamp(timestamp);
+                let format = FullFormat::new(decorator)
+                    .use_custom_timestamp(timestamp);
                 self.build_with_drain(format.build())
             }
             Format::Compact => {
-                let format = CompactFormat::new(decorator).use_custom_timestamp(timestamp);
+                let format = CompactFormat::new(decorator)
+                    .use_custom_timestamp(timestamp);
                 self.build_with_drain(format.build())
             }
         };

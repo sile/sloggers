@@ -1,6 +1,7 @@
 //! File logger.
 use slog::{Drain, FnValue, Logger};
 use slog_async::Async;
+use slog_atomic::AtomicSwitch;
 use slog_kvfilter::{KVFilter, KVFilterList};
 use slog_term::{CompactFormat, FullFormat, PlainDecorator};
 use std::fmt::Debug;
@@ -108,7 +109,8 @@ impl FileLoggerBuilder {
                 .build()
                 .fuse();
 
-            let drain = pars.level.set_level_filter(drain).fuse();
+            let drain =
+                AtomicSwitch::new(pars.level.set_level_filter(drain).fuse());
 
             match pars.source_location {
                 SourceLocation::None => Logger::root(drain, o!()),

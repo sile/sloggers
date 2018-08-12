@@ -74,7 +74,9 @@ impl FileLoggerBuilder {
         self
     }
 
-    /// Sets KVFilter
+    /// Sets [`KVFilter`].
+    ///
+    /// [`KVFilter`]: https://docs.rs/slog-kvfilter/0.6/slog_kvfilter/struct.KVFilter.html
     pub fn kvfilter(&mut self,
                     level: Severity,
                     only_pass_any_on_all_keys: Option<KVFilterList>,

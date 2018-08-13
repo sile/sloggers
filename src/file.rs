@@ -112,7 +112,7 @@ impl FileLoggerBuilder {
                 .fuse();
 
             let drain =
-                AtomicSwitch::new(pars.level.set_level_filter(drain).fuse());
+                AtomicSwitch::new(drain.fuse());
 
             match pars.source_location {
                 SourceLocation::None => Logger::root(drain, o!()),
@@ -121,6 +121,8 @@ impl FileLoggerBuilder {
                 }
             }
         }
+
+        let drain = self.level.set_level_filter(drain);
 
         if let Some(ref p) = self.kvfilterparameters {
             let kvdrain = KVFilter::new(drain, p.severity.as_level())

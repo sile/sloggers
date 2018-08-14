@@ -96,33 +96,40 @@ impl TerminalLoggerBuilder {
         D: Drain + Send + 'static,
         D::Err: Debug,
     {
-        fn finalfuse<D>(pars: &TerminalLoggerBuilder, drain: D) -> Logger
-            where
-                D: Drain + Send + 'static,
-                D::Err: Debug {
-            let drain = Async::new(drain.fuse())
-                .chan_size(pars.channel_size)
-                .build()
-                .fuse();
-            let drain =
-                AtomicSwitch::new(pars.level.set_level_filter(drain).fuse());
-
-            match pars.source_location {
-                SourceLocation::None => Logger::root(drain, o!()),
-                SourceLocation::ModuleAndLine => {
-                    Logger::root(drain, o!("module" => FnValue(module_and_line)))
-                }
-            }
-        }
+        // async inside, level and key value filters outside for speed
+        let drain = Async::new(drain.fuse())
+            .chan_size(self.channel_size)
+            .build()
+            .fuse();
 
         if let Some(ref p) = self.kvfilterparameters {
             let kvdrain = KVFilter::new(drain, p.severity.as_level())
                 .always_suppress_any(p.always_suppress_any.clone())
                 .only_pass_any_on_all_keys(p.only_pass_any_on_all_keys.clone());
 
-            finalfuse(self,kvdrain)
+            let drain = self.level.set_level_filter(kvdrain.fuse());
+
+            let drain =
+                AtomicSwitch::new(drain.fuse()).fuse();
+
+            match self.source_location {
+                SourceLocation::None => Logger::root(drain.fuse(), o!()),
+                SourceLocation::ModuleAndLine => {
+                    Logger::root(drain.fuse(), o!("module" => FnValue(module_and_line)))
+                }
+            }
         } else {
-            finalfuse(self,drain)
+            let drain = self.level.set_level_filter(drain.fuse());
+
+            let drain =
+                AtomicSwitch::new(drain.fuse()).fuse();
+
+            match self.source_location {
+                SourceLocation::None => Logger::root(drain.fuse(), o!()),
+                SourceLocation::ModuleAndLine => {
+                    Logger::root(drain.fuse(), o!("module" => FnValue(module_and_line)))
+                }
+            }
         }
     }
 }

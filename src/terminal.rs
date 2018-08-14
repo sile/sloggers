@@ -105,7 +105,7 @@ impl TerminalLoggerBuilder {
                 .build()
                 .fuse();
             let drain =
-                AtomicSwitch::new(drain.fuse());
+                AtomicSwitch::new(pars.level.set_level_filter(drain).fuse());
 
             match pars.source_location {
                 SourceLocation::None => Logger::root(drain, o!()),
@@ -114,10 +114,6 @@ impl TerminalLoggerBuilder {
                 }
             }
         }
-
-        // level filter within KV Filter since otherwise the amount of messages
-        // can already overwhelm it
-        let drain = self.level.set_level_filter(drain);
 
         if let Some(ref p) = self.kvfilterparameters {
             let kvdrain = KVFilter::new(drain, p.severity.as_level())

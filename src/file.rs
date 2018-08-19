@@ -3,7 +3,7 @@ use slog::{Drain, FnValue, Logger};
 use slog_async::Async;
 use slog_term::{CompactFormat, FullFormat, PlainDecorator};
 use std::fmt::Debug;
-use std::fs::{File, OpenOptions};
+use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
@@ -76,6 +76,24 @@ impl FileLoggerBuilder {
         self
     }
 
+    /// TODO: doc
+    ///
+    /// The default value is `std::u64::MAX`.
+    pub fn rotate_size(&mut self, size: u64) -> &mut Self {
+        self.appender.rotate_size = size;
+        self
+    }
+
+    /// Sets the maximum number of rotated log files to keep.
+    ///
+    /// Older rotated log files get pruned.
+    ///
+    /// The default value is `8`.
+    pub fn rotate_keep(&mut self, count: u64) -> &mut Self {
+        self.appender.rotate_keep = count;
+        self
+    }
+
     fn build_with_drain<D>(&self, drain: D) -> Logger
     where
         D: Drain + Send + 'static,
@@ -119,6 +137,9 @@ struct FileAppender {
     path: PathBuf,
     file: Option<File>,
     truncate: bool,
+    written_size: u64,
+    rotate_size: u64,
+    rotate_keep: usize,
 }
 impl Clone for FileAppender {
     fn clone(&self) -> Self {
@@ -126,19 +147,27 @@ impl Clone for FileAppender {
             path: self.path.clone(),
             file: None,
             truncate: self.truncate,
+            written_size: 0,
+            rotate_size: self.rotate_size,
+            rotate_keep: self.rotate_keep,
         }
     }
 }
 impl FileAppender {
     pub fn new<P: AsRef<Path>>(path: P) -> Self {
+        use std::u64;
+
         FileAppender {
             path: path.as_ref().to_path_buf(),
             file: None,
             truncate: false,
+            written_size: 0,
+            rotate_size: u64::MAX,
+            rotate_keep: 8,
         }
     }
     fn reopen_if_needed(&mut self) -> io::Result<()> {
-        if !self.path.exists() || self.file.is_none() {
+        if !self.path.exists() {
             let mut file_builder = OpenOptions::new();
             file_builder.create(true);
             if self.truncate {
@@ -148,22 +177,62 @@ impl FileAppender {
                 .append(!self.truncate)
                 .write(true)
                 .open(&self.path)?;
+            self.written_size = file.metadata()?.len();
             self.file = Some(file);
         }
         Ok(())
+    }
+    fn rotate(&mut self) -> io::Result<()> {
+        let _ = self.file.take();
+
+        for i in (1..self.rotate_keep + 1).rev() {
+            let from = self.rotated_path(i)?;
+            let to = self.rotated_path(i + 1)?;
+            if from.exists() {
+                fs::rename(from, to)?;
+            }
+        }
+        if self.path.exists() {
+            fs::rename(&self.path, self.rotated_path(1)?)?;
+        }
+
+        let delete_path = self.rotated_path(self.rotate_keep + 1)?;
+        if delete_path.exists() {
+            fs::remove_file(delete_path)?;
+        }
+
+        self.written_size = 0;
+        self.reopen_if_needed()?;
+
+        Ok(())
+    }
+    fn rotated_path(&self, i: usize) -> io::Result<PathBuf> {
+        let path = self.path.to_str().ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("Non UTF-8 log file path: {:?}", self.path),
+            )
+        })?;
+        Ok(PathBuf::from(format!("{}.{}", path, i)))
     }
 }
 impl Write for FileAppender {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.reopen_if_needed()?;
-        if let Some(ref mut f) = self.file {
-            f.write(buf)
+        let size = if let Some(ref mut f) = self.file {
+            f.write(buf)?
         } else {
-            Err(io::Error::new(
+            return Err(io::Error::new(
                 io::ErrorKind::Other,
                 format!("Cannot open file: {:?}", self.path),
-            ))
+            ));
+        };
+
+        self.written_size += size as u64;
+        if self.written_size >= self.rotate_size {
+            self.rotate()?;
         }
+        Ok(size)
     }
     fn flush(&mut self) -> io::Result<()> {
         if let Some(ref mut f) = self.file {
@@ -221,4 +290,9 @@ impl Config for FileLoggerConfig {
 
 fn default_channel_size() -> usize {
     1024
+}
+
+#[cfg(test)]
+mod tests {
+    // TODO: log rotation test
 }

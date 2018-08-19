@@ -114,9 +114,6 @@ impl FileLoggerBuilder {
 
             let drain = self.level.set_level_filter(kvdrain.fuse());
 
-            let drain =
-                AtomicSwitch::new(drain.fuse()).fuse();
-
             match self.source_location {
                 SourceLocation::None => Logger::root(drain.fuse(), o!()),
                 SourceLocation::ModuleAndLine => {

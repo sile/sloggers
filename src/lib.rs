@@ -54,7 +54,6 @@ extern crate slog;
 extern crate slog_async;
 extern crate slog_scope;
 extern crate slog_stdlog;
-extern crate slog_atomic;
 extern crate slog_term;
 extern crate slog_kvfilter;
 #[macro_use]

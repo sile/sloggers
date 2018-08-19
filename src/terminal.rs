@@ -1,7 +1,6 @@
 //! Terminal logger.
 use slog::{self, Drain, FnValue, Logger};
 use slog_async::Async;
-use slog_atomic::AtomicSwitch;
 use slog_term::{self, CompactFormat, FullFormat, PlainDecorator, TermDecorator};
 use std::fmt::Debug;
 use std::io;
@@ -117,9 +116,6 @@ impl TerminalLoggerBuilder {
             }
         } else {
             let drain = self.level.set_level_filter(drain.fuse());
-
-            let drain =
-                AtomicSwitch::new(drain.fuse()).fuse();
 
             match self.source_location {
                 SourceLocation::None => Logger::root(drain.fuse(), o!()),

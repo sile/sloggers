@@ -4,10 +4,13 @@ use slog_async::Async;
 use slog_term::{self, CompactFormat, FullFormat, PlainDecorator, TermDecorator};
 use std::fmt::Debug;
 use std::io;
+use slog_kvfilter::KVFilterList;
+use slog_kvfilter::KVFilter;
 
 use misc::{module_and_line, timezone_to_timestamp_fn};
 use types::{Format, Severity, SourceLocation, TimeZone};
 use {Build, Config, Result};
+use misc::KVFilterParameters;
 
 /// A logger builder which build loggers that output log records to the terminal.
 ///
@@ -20,6 +23,7 @@ pub struct TerminalLoggerBuilder {
     destination: Destination,
     level: Severity,
     channel_size: usize,
+    kvfilterparameters: Option<KVFilterParameters>,
 }
 impl TerminalLoggerBuilder {
     /// Makes a new `TerminalLoggerBuilder` instance.
@@ -31,6 +35,7 @@ impl TerminalLoggerBuilder {
             destination: Destination::default(),
             level: Severity::default(),
             channel_size: 1024,
+            kvfilterparameters: None,
         }
     }
 
@@ -70,21 +75,53 @@ impl TerminalLoggerBuilder {
         self
     }
 
+    /// Sets [`KVFilter`].
+    ///
+    /// [`KVFilter`]: https://docs.rs/slog-kvfilter/0.6/slog_kvfilter/struct.KVFilter.html
+    pub fn kvfilter(&mut self,
+                    level: Severity,
+                    only_pass_any_on_all_keys: Option<KVFilterList>,
+                    always_suppress_any: Option<KVFilterList>) -> &mut Self {
+        self.kvfilterparameters = Some(KVFilterParameters {
+            severity: level,
+            only_pass_any_on_all_keys,
+            always_suppress_any
+        });
+        self
+    }
+
     fn build_with_drain<D>(&self, drain: D) -> Logger
     where
         D: Drain + Send + 'static,
         D::Err: Debug,
     {
+        // async inside, level and key value filters outside for speed
         let drain = Async::new(drain.fuse())
             .chan_size(self.channel_size)
             .build()
             .fuse();
-        let drain = self.level.set_level_filter(drain).fuse();
 
-        match self.source_location {
-            SourceLocation::None => Logger::root(drain, o!()),
-            SourceLocation::ModuleAndLine => {
-                Logger::root(drain, o!("module" => FnValue(module_and_line)))
+        if let Some(ref p) = self.kvfilterparameters {
+            let kvdrain = KVFilter::new(drain, p.severity.as_level())
+                .always_suppress_any(p.always_suppress_any.clone())
+                .only_pass_any_on_all_keys(p.only_pass_any_on_all_keys.clone());
+
+            let drain = self.level.set_level_filter(kvdrain.fuse());
+
+            match self.source_location {
+                SourceLocation::None => Logger::root(drain.fuse(), o!()),
+                SourceLocation::ModuleAndLine => {
+                    Logger::root(drain.fuse(), o!("module" => FnValue(module_and_line)))
+                }
+            }
+        } else {
+            let drain = self.level.set_level_filter(drain.fuse());
+
+            match self.source_location {
+                SourceLocation::None => Logger::root(drain.fuse(), o!()),
+                SourceLocation::ModuleAndLine => {
+                    Logger::root(drain.fuse(), o!("module" => FnValue(module_and_line)))
+                }
             }
         }
     }

@@ -11,13 +11,13 @@ license = "MIT"
 
 [badges]
 travis-ci = {repository = "sile/sloggers"}
+codecov = {repository = "sile/sloggers"}
 
 [dependencies]
 serde = "1"
 serde_derive = "1"
 slog = "2"
 slog-async = "2"
-slog-atomic = "2"
 slog-term = "2"
 slog-scope = "4"
 slog-kvfilter = "~0.6"

@@ -8,9 +8,9 @@ use std::fs::{File, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
+use misc::KVFilterParameters;
 use misc::{module_and_line, timezone_to_timestamp_fn};
 use types::{Format, Severity, SourceLocation, TimeZone};
-use misc::KVFilterParameters;
 use {Build, Config, Result};
 
 /// A logger builder which build loggers that write log records to the specified file.
@@ -76,14 +76,16 @@ impl FileLoggerBuilder {
     /// Sets [`KVFilter`].
     ///
     /// [`KVFilter`]: https://docs.rs/slog-kvfilter/0.6/slog_kvfilter/struct.KVFilter.html
-    pub fn kvfilter(&mut self,
-                    level: Severity,
-                    only_pass_any_on_all_keys: Option<KVFilterList>,
-                    always_suppress_any: Option<KVFilterList>) -> &mut Self {
+    pub fn kvfilter(
+        &mut self,
+        level: Severity,
+        only_pass_any_on_all_keys: Option<KVFilterList>,
+        always_suppress_any: Option<KVFilterList>,
+    ) -> &mut Self {
         self.kvfilterparameters = Some(KVFilterParameters {
             severity: level,
             only_pass_any_on_all_keys,
-            always_suppress_any
+            always_suppress_any,
         });
         self
     }
@@ -138,13 +140,11 @@ impl Build for FileLoggerBuilder {
         let timestamp = timezone_to_timestamp_fn(self.timezone);
         let logger = match self.format {
             Format::Full => {
-                let format = FullFormat::new(decorator)
-                    .use_custom_timestamp(timestamp);
+                let format = FullFormat::new(decorator).use_custom_timestamp(timestamp);
                 self.build_with_drain(format.build())
             }
             Format::Compact => {
-                let format = CompactFormat::new(decorator)
-                    .use_custom_timestamp(timestamp);
+                let format = CompactFormat::new(decorator).use_custom_timestamp(timestamp);
                 self.build_with_drain(format.build())
             }
         };

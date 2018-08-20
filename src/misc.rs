@@ -5,6 +5,8 @@ use slog_term;
 use std::io;
 use trackable::error::ErrorKindExt;
 
+use slog_kvfilter::KVFilterList;
+use types::Severity;
 use types::TimeZone;
 use {ErrorKind, Result};
 
@@ -23,4 +25,11 @@ pub fn timezone_to_timestamp_fn(timezone: TimeZone) -> fn(&mut io::Write) -> io:
         TimeZone::Utc => slog_term::timestamp_utc,
         TimeZone::Local => slog_term::timestamp_local,
     }
+}
+
+#[derive(Debug)]
+pub struct KVFilterParameters {
+    pub severity: Severity,
+    pub only_pass_any_on_all_keys: Option<KVFilterList>,
+    pub always_suppress_any: Option<KVFilterList>,
 }

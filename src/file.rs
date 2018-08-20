@@ -1,12 +1,14 @@
 //! File logger.
 use slog::{Drain, FnValue, Logger};
 use slog_async::Async;
+use slog_kvfilter::{KVFilter, KVFilterList};
 use slog_term::{CompactFormat, FullFormat, PlainDecorator};
 use std::fmt::Debug;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
+use misc::KVFilterParameters;
 use misc::{module_and_line, timezone_to_timestamp_fn};
 use types::{Format, Severity, SourceLocation, TimeZone};
 use {Build, Config, Result};
@@ -22,6 +24,7 @@ pub struct FileLoggerBuilder {
     level: Severity,
     appender: FileAppender,
     channel_size: usize,
+    kvfilterparameters: Option<KVFilterParameters>,
 }
 impl FileLoggerBuilder {
     /// Makes a new `FileLoggerBuilder` instance.
@@ -36,6 +39,7 @@ impl FileLoggerBuilder {
             level: Severity::default(),
             appender: FileAppender::new(path),
             channel_size: 1024,
+            kvfilterparameters: None,
         }
     }
 
@@ -69,6 +73,23 @@ impl FileLoggerBuilder {
         self
     }
 
+    /// Sets [`KVFilter`].
+    ///
+    /// [`KVFilter`]: https://docs.rs/slog-kvfilter/0.6/slog_kvfilter/struct.KVFilter.html
+    pub fn kvfilter(
+        &mut self,
+        level: Severity,
+        only_pass_any_on_all_keys: Option<KVFilterList>,
+        always_suppress_any: Option<KVFilterList>,
+    ) -> &mut Self {
+        self.kvfilterparameters = Some(KVFilterParameters {
+            severity: level,
+            only_pass_any_on_all_keys,
+            always_suppress_any,
+        });
+        self
+    }
+
     /// By default, logger just appends log messages to file.
     /// If this method called, logger truncates the file to 0 length when opening.
     pub fn truncate(&mut self) -> &mut Self {
@@ -99,21 +120,38 @@ impl FileLoggerBuilder {
         D: Drain + Send + 'static,
         D::Err: Debug,
     {
+        // async inside, level and key value filters outside for speed
         let drain = Async::new(drain.fuse())
             .chan_size(self.channel_size)
             .build()
             .fuse();
 
-        let drain = self.level.set_level_filter(drain).fuse();
+        if let Some(ref p) = self.kvfilterparameters {
+            let kvdrain = KVFilter::new(drain, p.severity.as_level())
+                .always_suppress_any(p.always_suppress_any.clone())
+                .only_pass_any_on_all_keys(p.only_pass_any_on_all_keys.clone());
 
-        match self.source_location {
-            SourceLocation::None => Logger::root(drain, o!()),
-            SourceLocation::ModuleAndLine => {
-                Logger::root(drain, o!("module" => FnValue(module_and_line)))
+            let drain = self.level.set_level_filter(kvdrain.fuse());
+
+            match self.source_location {
+                SourceLocation::None => Logger::root(drain.fuse(), o!()),
+                SourceLocation::ModuleAndLine => {
+                    Logger::root(drain.fuse(), o!("module" => FnValue(module_and_line)))
+                }
+            }
+        } else {
+            let drain = self.level.set_level_filter(drain.fuse());
+
+            match self.source_location {
+                SourceLocation::None => Logger::root(drain.fuse(), o!()),
+                SourceLocation::ModuleAndLine => {
+                    Logger::root(drain.fuse(), o!("module" => FnValue(module_and_line)))
+                }
             }
         }
     }
 }
+
 impl Build for FileLoggerBuilder {
     fn build(&self) -> Result<Logger> {
         let decorator = PlainDecorator::new(self.appender.clone());

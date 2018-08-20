@@ -110,7 +110,7 @@ impl FileLoggerBuilder {
     /// Older rotated log files get pruned.
     ///
     /// The default value is `8`.
-    pub fn rotate_keep(&mut self, count: u64) -> &mut Self {
+    pub fn rotate_keep(&mut self, count: usize) -> &mut Self {
         self.appender.rotate_keep = count;
         self
     }

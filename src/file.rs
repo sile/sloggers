@@ -97,9 +97,18 @@ impl FileLoggerBuilder {
         self
     }
 
-    /// TODO: doc
+    /// Sets the threshold used for determining whether rotate the current log file.
+    ///
+    /// If the byte size of the current log file exceeds this value, the file will be rotated.
+    /// The name of the rotated file will be `"${ORIGINAL_FILE_NAME}.0"`.
+    /// If there is a previously rotated file,
+    /// it will be renamed to `"${ORIGINAL_FILE_NAME}.1"` before rotation of the current log file.
+    /// This process is iterated recursively until log file names no longer conflict or
+    /// [`rotate_keep`] limit reached.
     ///
     /// The default value is `std::u64::MAX`.
+    ///
+    /// [`rotate_keep`]: ./struct.FileLoggerBuilder.html#method.rotate_keep
     pub fn rotate_size(&mut self, size: u64) -> &mut Self {
         self.appender.rotate_size = size;
         self
@@ -107,7 +116,7 @@ impl FileLoggerBuilder {
 
     /// Sets the maximum number of rotated log files to keep.
     ///
-    /// Older rotated log files get pruned.
+    /// If the number of rotated log files exceed this value, the oldest log file will be deleted.
     ///
     /// The default value is `8`.
     pub fn rotate_keep(&mut self, count: usize) -> &mut Self {

@@ -202,19 +202,17 @@ impl Clone for FileAppender {
 }
 impl FileAppender {
     pub fn new<P: AsRef<Path>>(path: P) -> Self {
-        use std::u64;
-
         FileAppender {
             path: path.as_ref().to_path_buf(),
             file: None,
             truncate: false,
             written_size: 0,
-            rotate_size: u64::MAX,
-            rotate_keep: 8,
+            rotate_size: default_rotate_size(),
+            rotate_keep: default_rotate_keep(),
         }
     }
     fn reopen_if_needed(&mut self) -> io::Result<()> {
-        if !self.path.exists() {
+        if !self.path.exists() || self.file.is_none() {
             let mut file_builder = OpenOptions::new();
             file_builder.create(true);
             if self.truncate {
@@ -276,21 +274,21 @@ impl Write for FileAppender {
         };
 
         self.written_size += size as u64;
-        if self.written_size >= self.rotate_size {
-            self.rotate()?;
-        }
         Ok(size)
     }
     fn flush(&mut self) -> io::Result<()> {
         if let Some(ref mut f) = self.file {
             f.flush()?;
         }
+        if self.written_size >= self.rotate_size {
+            self.rotate()?;
+        }
         Ok(())
     }
 }
 
 /// The configuration of `FileLoggerBuilder`.
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileLoggerConfig {
     /// Log level.
     #[serde(default)]
@@ -318,6 +316,22 @@ pub struct FileLoggerConfig {
     /// Truncate the file or not
     #[serde(default)]
     pub truncate: bool,
+
+    /// Log file rotation size.
+    ///
+    /// For details, see the documentation of [`rotate_size`].
+    ///
+    /// [`rotate_size`]: ./struct.FileLoggerBuilder.html#method.rotate_size
+    #[serde(default = "default_rotate_size")]
+    pub rotate_size: u64,
+
+    /// Maximum number of rotated log files to keep.
+    ///
+    /// For details, see the documentation of [`rotate_keep`].
+    ///
+    /// [`rotate_keep`]: ./struct.FileLoggerBuilder.html#method.rotate_keep
+    #[serde(default = "default_rotate_keep")]
+    pub rotate_keep: usize,
 }
 impl Config for FileLoggerConfig {
     type Builder = FileLoggerBuilder;
@@ -328,15 +342,42 @@ impl Config for FileLoggerConfig {
         builder.source_location(self.source_location);
         builder.timezone(self.timezone);
         builder.channel_size(self.channel_size);
+        builder.rotate_size(self.rotate_size);
+        builder.rotate_keep(self.rotate_keep);
         if self.truncate {
             builder.truncate();
         }
         Ok(builder)
     }
 }
+impl Default for FileLoggerConfig {
+    fn default() -> Self {
+        FileLoggerConfig {
+            level: Severity::default(),
+            format: Format::default(),
+            source_location: SourceLocation::default(),
+            timezone: TimeZone::default(),
+            path: PathBuf::default(),
+            channel_size: default_channel_size(),
+            truncate: false,
+            rotate_size: default_rotate_size(),
+            rotate_keep: default_rotate_keep(),
+        }
+    }
+}
 
 fn default_channel_size() -> usize {
     1024
+}
+
+fn default_rotate_size() -> u64 {
+    use std::u64;
+
+    u64::MAX
+}
+
+fn default_rotate_keep() -> usize {
+    8
 }
 
 #[cfg(test)]

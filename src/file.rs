@@ -332,5 +332,45 @@ fn default_channel_size() -> usize {
 
 #[cfg(test)]
 mod tests {
-    // TODO: log rotation test
+    use super::*;
+    use Build;
+
+    use std::thread;
+    use std::time::Duration;
+    use tempdir::TempDir;
+
+    #[test]
+    fn file_rotation_works() {
+        let dir = TempDir::new("sloggers_test").unwrap();
+        let logger = FileLoggerBuilder::new(dir.path().join("foo.log"))
+            .rotate_size(128)
+            .rotate_keep(2)
+            .build()
+            .unwrap();
+
+        info!(logger, "hello");
+        thread::sleep(Duration::from_millis(50));
+        assert!(dir.path().join("foo.log").exists());
+        assert!(!dir.path().join("foo.log.1").exists());
+
+        info!(logger, "world");
+        thread::sleep(Duration::from_millis(50));
+        assert!(dir.path().join("foo.log").exists());
+        assert!(dir.path().join("foo.log.1").exists());
+        assert!(!dir.path().join("foo.log.2").exists());
+
+        info!(logger, "vec(0): {:?}", vec![0; 128]);
+        thread::sleep(Duration::from_millis(50));
+        assert!(dir.path().join("foo.log").exists());
+        assert!(dir.path().join("foo.log.1").exists());
+        assert!(dir.path().join("foo.log.2").exists());
+        assert!(!dir.path().join("foo.log.3").exists());
+
+        info!(logger, "vec(1): {:?}", vec![0; 128]);
+        thread::sleep(Duration::from_millis(50));
+        assert!(dir.path().join("foo.log").exists());
+        assert!(dir.path().join("foo.log.1").exists());
+        assert!(dir.path().join("foo.log.2").exists());
+        assert!(!dir.path().join("foo.log.3").exists());
+    }
 }

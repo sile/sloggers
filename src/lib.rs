@@ -56,6 +56,8 @@ extern crate slog_kvfilter;
 extern crate slog_scope;
 extern crate slog_stdlog;
 extern crate slog_term;
+#[cfg(test)]
+extern crate tempdir;
 #[macro_use]
 extern crate trackable;
 

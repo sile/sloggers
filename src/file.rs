@@ -1,4 +1,5 @@
 //! File logger.
+use libflate::gzip::Encoder as GzipEncoder;
 use slog::{Drain, FnValue, Logger};
 use slog_async::Async;
 use slog_kvfilter::{KVFilter, KVFilterList};
@@ -7,6 +8,8 @@ use std::fmt::Debug;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+use std::sync::mpsc;
+use std::thread;
 
 use misc::KVFilterParameters;
 use misc::{module_and_line, timezone_to_timestamp_fn};
@@ -124,6 +127,17 @@ impl FileLoggerBuilder {
         self
     }
 
+    /// Sets whether to compress or not compress rotated files.
+    ///
+    /// If `true` is specified, rotated files will be compressed by GZIP algorithm and
+    /// the suffix ".gz" will be appended to those file names.
+    ///
+    /// The default value is `false`.
+    pub fn rotate_compress(&mut self, compress: bool) -> &mut Self {
+        self.appender.rotate_compress = compress;
+        self
+    }
+
     fn build_with_drain<D>(&self, drain: D) -> Logger
     where
         D: Drain + Send + 'static,
@@ -187,6 +201,8 @@ struct FileAppender {
     written_size: u64,
     rotate_size: u64,
     rotate_keep: usize,
+    rotate_compress: bool,
+    wait_compression: Option<mpsc::Receiver<io::Result<()>>>,
 }
 impl Clone for FileAppender {
     fn clone(&self) -> Self {
@@ -197,6 +213,8 @@ impl Clone for FileAppender {
             written_size: 0,
             rotate_size: self.rotate_size,
             rotate_keep: self.rotate_keep,
+            rotate_compress: self.rotate_compress,
+            wait_compression: None,
         }
     }
 }
@@ -209,6 +227,8 @@ impl FileAppender {
             written_size: 0,
             rotate_size: default_rotate_size(),
             rotate_keep: default_rotate_keep(),
+            rotate_compress: false,
+            wait_compression: None,
         }
     }
     fn reopen_if_needed(&mut self) -> io::Result<()> {
@@ -228,6 +248,25 @@ impl FileAppender {
         Ok(())
     }
     fn rotate(&mut self) -> io::Result<()> {
+        if let Some(ref mut rx) = self.wait_compression {
+            use std::sync::mpsc::TryRecvError;
+            match rx.try_recv() {
+                Err(TryRecvError::Empty) => {
+                    // The previous compression is in progress
+                    return Ok(());
+                }
+                Err(TryRecvError::Disconnected) => {
+                    let e =
+                        io::Error::new(io::ErrorKind::Other, "Log file compression thread aborted");
+                    return Err(e);
+                }
+                Ok(result) => {
+                    result?;
+                }
+            }
+        }
+        self.wait_compression = None;
+
         let _ = self.file.take();
 
         for i in (1..self.rotate_keep + 1).rev() {
@@ -238,7 +277,21 @@ impl FileAppender {
             }
         }
         if self.path.exists() {
-            fs::rename(&self.path, self.rotated_path(1)?)?;
+            let rotated_path = self.rotated_path(1)?;
+            if self.rotate_compress {
+                let (plain_path, temp_gz_path) = self.rotated_paths_for_compression()?;
+                let (tx, rx) = mpsc::channel();
+
+                fs::rename(&self.path, &plain_path)?;
+                thread::spawn(move || {
+                    let result = Self::compress(plain_path, temp_gz_path, rotated_path);
+                    let _ = tx.send(result);
+                });
+
+                self.wait_compression = Some(rx);
+            } else {
+                fs::rename(&self.path, rotated_path)?;
+            }
         }
 
         let delete_path = self.rotated_path(self.rotate_keep + 1)?;
@@ -258,7 +311,33 @@ impl FileAppender {
                 format!("Non UTF-8 log file path: {:?}", self.path),
             )
         })?;
-        Ok(PathBuf::from(format!("{}.{}", path, i)))
+        if self.rotate_compress {
+            Ok(PathBuf::from(format!("{}.{}.gz", path, i)))
+        } else {
+            Ok(PathBuf::from(format!("{}.{}", path, i)))
+        }
+    }
+    fn rotated_paths_for_compression(&self) -> io::Result<(PathBuf, PathBuf)> {
+        let path = self.path.to_str().ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("Non UTF-8 log file path: {:?}", self.path),
+            )
+        })?;
+        Ok((
+            PathBuf::from(format!("{}.1", path)),
+            PathBuf::from(format!("{}.1.gz.temp", path)),
+        ))
+    }
+    fn compress(input_path: PathBuf, temp_path: PathBuf, output_path: PathBuf) -> io::Result<()> {
+        let mut input = File::open(&input_path)?;
+        let mut temp = GzipEncoder::new(File::create(&temp_path)?)?;
+        io::copy(&mut input, &mut temp)?;
+        temp.finish().into_result()?;
+
+        fs::rename(temp_path, output_path)?;
+        fs::remove_file(input_path)?;
+        Ok(())
     }
 }
 impl Write for FileAppender {
@@ -332,6 +411,16 @@ pub struct FileLoggerConfig {
     /// [`rotate_keep`]: ./struct.FileLoggerBuilder.html#method.rotate_keep
     #[serde(default = "default_rotate_keep")]
     pub rotate_keep: usize,
+
+    /// Whether to compress or not compress rotated files.
+    ///
+    /// For details, see the documentation of [`rotate_keep`].
+    ///
+    /// [`rotate_compress`]: ./struct.FileLoggerBuilder.html#method.rotate_compress
+    ///
+    /// The default value is `false`.
+    #[serde(default)]
+    pub rotate_compress: bool,
 }
 impl Config for FileLoggerConfig {
     type Builder = FileLoggerBuilder;
@@ -344,6 +433,7 @@ impl Config for FileLoggerConfig {
         builder.channel_size(self.channel_size);
         builder.rotate_size(self.rotate_size);
         builder.rotate_keep(self.rotate_keep);
+        builder.rotate_compress(self.rotate_compress);
         if self.truncate {
             builder.truncate();
         }
@@ -362,6 +452,7 @@ impl Default for FileLoggerConfig {
             truncate: false,
             rotate_size: default_rotate_size(),
             rotate_keep: default_rotate_keep(),
+            rotate_compress: false,
         }
     }
 }
@@ -422,5 +513,41 @@ mod tests {
         assert!(dir.path().join("foo.log.1").exists());
         assert!(dir.path().join("foo.log.2").exists());
         assert!(!dir.path().join("foo.log.3").exists());
+    }
+
+    #[test]
+    fn file_gzip_rotation_works() {
+        let dir = TempDir::new("sloggers_test").unwrap();
+        let logger = FileLoggerBuilder::new(dir.path().join("foo.log"))
+            .rotate_size(128)
+            .rotate_keep(2)
+            .rotate_compress(true)
+            .build()
+            .unwrap();
+
+        info!(logger, "hello");
+        thread::sleep(Duration::from_millis(50));
+        assert!(dir.path().join("foo.log").exists());
+        assert!(!dir.path().join("foo.log.1").exists());
+
+        info!(logger, "world");
+        thread::sleep(Duration::from_millis(50));
+        assert!(dir.path().join("foo.log").exists());
+        assert!(dir.path().join("foo.log.1.gz").exists());
+        assert!(!dir.path().join("foo.log.2.gz").exists());
+
+        info!(logger, "vec(0): {:?}", vec![0; 128]);
+        thread::sleep(Duration::from_millis(50));
+        assert!(dir.path().join("foo.log").exists());
+        assert!(dir.path().join("foo.log.1.gz").exists());
+        assert!(dir.path().join("foo.log.2.gz").exists());
+        assert!(!dir.path().join("foo.log.3.gz").exists());
+
+        info!(logger, "vec(1): {:?}", vec![0; 128]);
+        thread::sleep(Duration::from_millis(50));
+        assert!(dir.path().join("foo.log").exists());
+        assert!(dir.path().join("foo.log.1.gz").exists());
+        assert!(dir.path().join("foo.log.2.gz").exists());
+        assert!(!dir.path().join("foo.log.3.gz").exists());
     }
 }

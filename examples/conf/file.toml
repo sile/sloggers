@@ -6,3 +6,4 @@ level = "debug" # one of trace, debug, info, warning, error, critical
 path = "file.log"
 rotate_size = 256
 rotate_keep = 2
+# rotate_compress = true

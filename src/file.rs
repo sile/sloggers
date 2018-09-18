@@ -1,4 +1,5 @@
 //! File logger.
+use chrono::{DateTime, Local, TimeZone as ChronoTimeZone, Utc};
 use slog::{Drain, FnValue, Logger};
 use slog_async::Async;
 use slog_kvfilter::{KVFilter, KVFilterList};
@@ -26,6 +27,7 @@ pub struct FileLoggerBuilder {
     channel_size: usize,
     kvfilterparameters: Option<KVFilterParameters>,
 }
+
 impl FileLoggerBuilder {
     /// Makes a new `FileLoggerBuilder` instance.
     ///
@@ -158,6 +160,7 @@ struct FileAppender {
     file: Option<File>,
     truncate: bool,
 }
+
 impl Clone for FileAppender {
     fn clone(&self) -> Self {
         FileAppender {
@@ -167,6 +170,7 @@ impl Clone for FileAppender {
         }
     }
 }
+
 impl FileAppender {
     pub fn new<P: AsRef<Path>>(path: P) -> Self {
         FileAppender {
@@ -191,6 +195,7 @@ impl FileAppender {
         Ok(())
     }
 }
+
 impl Write for FileAppender {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.reopen_if_needed()?;
@@ -230,8 +235,20 @@ pub struct FileLoggerConfig {
     #[serde(default)]
     pub timezone: TimeZone,
 
-    /// Log file path.
-    pub path: PathBuf,
+    /// Format string for the timestamp in the path.
+    /// The string is formatted using [strftime](https://docs.rs/chrono/0.4.6/chrono/format/strftime/index.html#specifiers)
+    ///
+    /// Default: "%Y%m%d_%H%M", example: "20180918_1127"
+    #[serde(default = "default_timestamp_template")]
+    pub timestamp_template: String,
+
+    /// Log file path template.
+    ///
+    /// It will be used as-is, with the following transformation:
+    ///
+    /// All occurrences of the substring "{timestamp}" will be replaced with the current timestamp
+    /// formatted according to `timestamp_template`. The timestamp will respect the `timezone` setting.
+    pub path: String,
 
     /// Asynchronous channel size
     #[serde(default = "default_channel_size")]
@@ -241,10 +258,13 @@ pub struct FileLoggerConfig {
     #[serde(default)]
     pub truncate: bool,
 }
+
 impl Config for FileLoggerConfig {
     type Builder = FileLoggerBuilder;
     fn try_to_builder(&self) -> Result<Self::Builder> {
-        let mut builder = FileLoggerBuilder::new(&self.path);
+        let now = Utc::now();
+        let path = path_template_to_path(&self.path, &self.timestamp_template, self.timezone, now);
+        let mut builder = FileLoggerBuilder::new(&path);
         builder.level(self.level);
         builder.format(self.format);
         builder.source_location(self.source_location);
@@ -257,6 +277,45 @@ impl Config for FileLoggerConfig {
     }
 }
 
+fn path_template_to_path(
+    path_template: &str,
+    timestamp_template: &str,
+    timezone: TimeZone,
+    date_time: DateTime<Utc>,
+) -> PathBuf {
+    let timestamp_string = match timezone {
+        TimeZone::Local => {
+            let local_timestamp = Local.from_utc_datetime(&date_time.naive_utc());
+            local_timestamp.format(&timestamp_template)
+        }
+        TimeZone::Utc => date_time.format(&timestamp_template),
+    }.to_string();
+    let path_string = path_template.replace("{timestamp}", &timestamp_string);
+    PathBuf::from(path_string)
+}
+
 fn default_channel_size() -> usize {
     1024
+}
+
+fn default_timestamp_template() -> String {
+    "%Y%m%d_%H%M".to_owned()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::NaiveDateTime;
+
+    #[test]
+    fn test_path_template_to_path() {
+        let actual = path_template_to_path(
+            "c:\\temp\\foo_{timestamp}.log",
+            "%Y%m%d_%H%M",
+            TimeZone::Utc, // Local is difficult to test, omitting :(
+            Utc.from_utc_datetime(&NaiveDateTime::from_timestamp(1537265991, 0)),
+        );
+        let expected = "c:\\temp\\foo_20180918_1019.log";
+        assert_eq!(PathBuf::from(expected), actual);
+    }
 }

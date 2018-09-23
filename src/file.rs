@@ -1,18 +1,21 @@
 //! File logger.
 use chrono::{DateTime, Local, TimeZone as ChronoTimeZone, Utc};
+use libflate::gzip::Encoder as GzipEncoder;
 use slog::{Drain, FnValue, Logger};
 use slog_async::Async;
 use slog_kvfilter::{KVFilter, KVFilterList};
 use slog_term::{CompactFormat, FullFormat, PlainDecorator};
 use std::fmt::Debug;
-use std::fs::{File, OpenOptions};
+use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+use std::sync::mpsc;
+use std::thread;
 
 use misc::KVFilterParameters;
 use misc::{module_and_line, timezone_to_timestamp_fn};
 use types::{Format, Severity, SourceLocation, TimeZone};
-use {Build, Config, Result};
+use {Build, Config, ErrorKind, Result};
 
 /// A logger builder which build loggers that write log records to the specified file.
 ///
@@ -27,7 +30,6 @@ pub struct FileLoggerBuilder {
     channel_size: usize,
     kvfilterparameters: Option<KVFilterParameters>,
 }
-
 impl FileLoggerBuilder {
     /// Makes a new `FileLoggerBuilder` instance.
     ///
@@ -99,6 +101,44 @@ impl FileLoggerBuilder {
         self
     }
 
+    /// Sets the threshold used for determining whether rotate the current log file.
+    ///
+    /// If the byte size of the current log file exceeds this value, the file will be rotated.
+    /// The name of the rotated file will be `"${ORIGINAL_FILE_NAME}.0"`.
+    /// If there is a previously rotated file,
+    /// it will be renamed to `"${ORIGINAL_FILE_NAME}.1"` before rotation of the current log file.
+    /// This process is iterated recursively until log file names no longer conflict or
+    /// [`rotate_keep`] limit reached.
+    ///
+    /// The default value is `std::u64::MAX`.
+    ///
+    /// [`rotate_keep`]: ./struct.FileLoggerBuilder.html#method.rotate_keep
+    pub fn rotate_size(&mut self, size: u64) -> &mut Self {
+        self.appender.rotate_size = size;
+        self
+    }
+
+    /// Sets the maximum number of rotated log files to keep.
+    ///
+    /// If the number of rotated log files exceed this value, the oldest log file will be deleted.
+    ///
+    /// The default value is `8`.
+    pub fn rotate_keep(&mut self, count: usize) -> &mut Self {
+        self.appender.rotate_keep = count;
+        self
+    }
+
+    /// Sets whether to compress or not compress rotated files.
+    ///
+    /// If `true` is specified, rotated files will be compressed by GZIP algorithm and
+    /// the suffix ".gz" will be appended to those file names.
+    ///
+    /// The default value is `false`.
+    pub fn rotate_compress(&mut self, compress: bool) -> &mut Self {
+        self.appender.rotate_compress = compress;
+        self
+    }
+
     fn build_with_drain<D>(&self, drain: D) -> Logger
     where
         D: Drain + Send + 'static,
@@ -135,7 +175,6 @@ impl FileLoggerBuilder {
         }
     }
 }
-
 impl Build for FileLoggerBuilder {
     fn build(&self) -> Result<Logger> {
         let decorator = PlainDecorator::new(self.appender.clone());
@@ -159,24 +198,37 @@ struct FileAppender {
     path: PathBuf,
     file: Option<File>,
     truncate: bool,
+    written_size: u64,
+    rotate_size: u64,
+    rotate_keep: usize,
+    rotate_compress: bool,
+    wait_compression: Option<mpsc::Receiver<io::Result<()>>>,
 }
-
 impl Clone for FileAppender {
     fn clone(&self) -> Self {
         FileAppender {
             path: self.path.clone(),
             file: None,
             truncate: self.truncate,
+            written_size: 0,
+            rotate_size: self.rotate_size,
+            rotate_keep: self.rotate_keep,
+            rotate_compress: self.rotate_compress,
+            wait_compression: None,
         }
     }
 }
-
 impl FileAppender {
     pub fn new<P: AsRef<Path>>(path: P) -> Self {
         FileAppender {
             path: path.as_ref().to_path_buf(),
             file: None,
             truncate: false,
+            written_size: 0,
+            rotate_size: default_rotate_size(),
+            rotate_keep: default_rotate_keep(),
+            rotate_compress: false,
+            wait_compression: None,
         }
     }
     fn reopen_if_needed(&mut self) -> io::Result<()> {
@@ -190,34 +242,132 @@ impl FileAppender {
                 .append(!self.truncate)
                 .write(true)
                 .open(&self.path)?;
+            self.written_size = file.metadata()?.len();
             self.file = Some(file);
         }
         Ok(())
     }
-}
+    fn rotate(&mut self) -> io::Result<()> {
+        if let Some(ref mut rx) = self.wait_compression {
+            use std::sync::mpsc::TryRecvError;
+            match rx.try_recv() {
+                Err(TryRecvError::Empty) => {
+                    // The previous compression is in progress
+                    return Ok(());
+                }
+                Err(TryRecvError::Disconnected) => {
+                    let e =
+                        io::Error::new(io::ErrorKind::Other, "Log file compression thread aborted");
+                    return Err(e);
+                }
+                Ok(result) => {
+                    result?;
+                }
+            }
+        }
+        self.wait_compression = None;
 
+        let _ = self.file.take();
+
+        for i in (1..self.rotate_keep + 1).rev() {
+            let from = self.rotated_path(i)?;
+            let to = self.rotated_path(i + 1)?;
+            if from.exists() {
+                fs::rename(from, to)?;
+            }
+        }
+        if self.path.exists() {
+            let rotated_path = self.rotated_path(1)?;
+            if self.rotate_compress {
+                let (plain_path, temp_gz_path) = self.rotated_paths_for_compression()?;
+                let (tx, rx) = mpsc::channel();
+
+                fs::rename(&self.path, &plain_path)?;
+                thread::spawn(move || {
+                    let result = Self::compress(plain_path, temp_gz_path, rotated_path);
+                    let _ = tx.send(result);
+                });
+
+                self.wait_compression = Some(rx);
+            } else {
+                fs::rename(&self.path, rotated_path)?;
+            }
+        }
+
+        let delete_path = self.rotated_path(self.rotate_keep + 1)?;
+        if delete_path.exists() {
+            fs::remove_file(delete_path)?;
+        }
+
+        self.written_size = 0;
+        self.reopen_if_needed()?;
+
+        Ok(())
+    }
+    fn rotated_path(&self, i: usize) -> io::Result<PathBuf> {
+        let path = self.path.to_str().ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("Non UTF-8 log file path: {:?}", self.path),
+            )
+        })?;
+        if self.rotate_compress {
+            Ok(PathBuf::from(format!("{}.{}.gz", path, i)))
+        } else {
+            Ok(PathBuf::from(format!("{}.{}", path, i)))
+        }
+    }
+    fn rotated_paths_for_compression(&self) -> io::Result<(PathBuf, PathBuf)> {
+        let path = self.path.to_str().ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("Non UTF-8 log file path: {:?}", self.path),
+            )
+        })?;
+        Ok((
+            PathBuf::from(format!("{}.1", path)),
+            PathBuf::from(format!("{}.1.gz.temp", path)),
+        ))
+    }
+    fn compress(input_path: PathBuf, temp_path: PathBuf, output_path: PathBuf) -> io::Result<()> {
+        let mut input = File::open(&input_path)?;
+        let mut temp = GzipEncoder::new(File::create(&temp_path)?)?;
+        io::copy(&mut input, &mut temp)?;
+        temp.finish().into_result()?;
+
+        fs::rename(temp_path, output_path)?;
+        fs::remove_file(input_path)?;
+        Ok(())
+    }
+}
 impl Write for FileAppender {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.reopen_if_needed()?;
-        if let Some(ref mut f) = self.file {
-            f.write(buf)
+        let size = if let Some(ref mut f) = self.file {
+            f.write(buf)?
         } else {
-            Err(io::Error::new(
+            return Err(io::Error::new(
                 io::ErrorKind::Other,
                 format!("Cannot open file: {:?}", self.path),
-            ))
-        }
+            ));
+        };
+
+        self.written_size += size as u64;
+        Ok(size)
     }
     fn flush(&mut self) -> io::Result<()> {
         if let Some(ref mut f) = self.file {
             f.flush()?;
+        }
+        if self.written_size >= self.rotate_size {
+            self.rotate()?;
         }
         Ok(())
     }
 }
 
 /// The configuration of `FileLoggerBuilder`.
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileLoggerConfig {
     /// Log level.
     #[serde(default)]
@@ -248,7 +398,7 @@ pub struct FileLoggerConfig {
     ///
     /// All occurrences of the substring "{timestamp}" will be replaced with the current timestamp
     /// formatted according to `timestamp_template`. The timestamp will respect the `timezone` setting.
-    pub path: String,
+    pub path: PathBuf,
 
     /// Asynchronous channel size
     #[serde(default = "default_channel_size")]
@@ -257,23 +407,70 @@ pub struct FileLoggerConfig {
     /// Truncate the file or not
     #[serde(default)]
     pub truncate: bool,
-}
 
+    /// Log file rotation size.
+    ///
+    /// For details, see the documentation of [`rotate_size`].
+    ///
+    /// [`rotate_size`]: ./struct.FileLoggerBuilder.html#method.rotate_size
+    #[serde(default = "default_rotate_size")]
+    pub rotate_size: u64,
+
+    /// Maximum number of rotated log files to keep.
+    ///
+    /// For details, see the documentation of [`rotate_keep`].
+    ///
+    /// [`rotate_keep`]: ./struct.FileLoggerBuilder.html#method.rotate_keep
+    #[serde(default = "default_rotate_keep")]
+    pub rotate_keep: usize,
+
+    /// Whether to compress or not compress rotated files.
+    ///
+    /// For details, see the documentation of [`rotate_keep`].
+    ///
+    /// [`rotate_compress`]: ./struct.FileLoggerBuilder.html#method.rotate_compress
+    ///
+    /// The default value is `false`.
+    #[serde(default)]
+    pub rotate_compress: bool,
+}
 impl Config for FileLoggerConfig {
     type Builder = FileLoggerBuilder;
     fn try_to_builder(&self) -> Result<Self::Builder> {
         let now = Utc::now();
-        let path = path_template_to_path(&self.path, &self.timestamp_template, self.timezone, now);
+        let path_template = self.path.to_str().ok_or(ErrorKind::Invalid)?;
+        let path =
+            path_template_to_path(path_template, &self.timestamp_template, self.timezone, now);
         let mut builder = FileLoggerBuilder::new(&path);
         builder.level(self.level);
         builder.format(self.format);
         builder.source_location(self.source_location);
         builder.timezone(self.timezone);
         builder.channel_size(self.channel_size);
+        builder.rotate_size(self.rotate_size);
+        builder.rotate_keep(self.rotate_keep);
+        builder.rotate_compress(self.rotate_compress);
         if self.truncate {
             builder.truncate();
         }
         Ok(builder)
+    }
+}
+impl Default for FileLoggerConfig {
+    fn default() -> Self {
+        FileLoggerConfig {
+            level: Severity::default(),
+            format: Format::default(),
+            source_location: SourceLocation::default(),
+            timezone: TimeZone::default(),
+            path: PathBuf::default(),
+            timestamp_template: default_timestamp_template(),
+            channel_size: default_channel_size(),
+            truncate: false,
+            rotate_size: default_rotate_size(),
+            rotate_keep: default_rotate_keep(),
+            rotate_compress: false,
+        }
     }
 }
 
@@ -298,24 +495,121 @@ fn default_channel_size() -> usize {
     1024
 }
 
+fn default_rotate_size() -> u64 {
+    use std::u64;
+
+    u64::MAX
+}
+
+fn default_rotate_keep() -> usize {
+    8
+}
+
 fn default_timestamp_template() -> String {
     "%Y%m%d_%H%M".to_owned()
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use chrono::NaiveDateTime;
+    use std::thread;
+    use std::time::Duration;
+    use tempdir::TempDir;
+
+    use super::*;
+    use {Build, ErrorKind, Result};
 
     #[test]
-    fn test_path_template_to_path() {
+    fn file_rotation_works() -> Result<()> {
+        let dir = TempDir::new("sloggers_test")?;
+        let logger = FileLoggerBuilder::new(dir.path().join("foo.log"))
+            .rotate_size(128)
+            .rotate_keep(2)
+            .build()?;
+
+        info!(logger, "hello");
+        thread::sleep(Duration::from_millis(50));
+        assert!(dir.path().join("foo.log").exists());
+        assert!(!dir.path().join("foo.log.1").exists());
+
+        info!(logger, "world");
+        thread::sleep(Duration::from_millis(50));
+        assert!(dir.path().join("foo.log").exists());
+        assert!(dir.path().join("foo.log.1").exists());
+        assert!(!dir.path().join("foo.log.2").exists());
+
+        info!(logger, "vec(0): {:?}", vec![0; 128]);
+        thread::sleep(Duration::from_millis(50));
+        assert!(dir.path().join("foo.log").exists());
+        assert!(dir.path().join("foo.log.1").exists());
+        assert!(dir.path().join("foo.log.2").exists());
+        assert!(!dir.path().join("foo.log.3").exists());
+
+        info!(logger, "vec(1): {:?}", vec![0; 128]);
+        thread::sleep(Duration::from_millis(50));
+        assert!(dir.path().join("foo.log").exists());
+        assert!(dir.path().join("foo.log.1").exists());
+        assert!(dir.path().join("foo.log.2").exists());
+        assert!(!dir.path().join("foo.log.3").exists());
+
+        Ok(())
+    }
+
+    #[test]
+    fn file_gzip_rotation_works() -> Result<()> {
+        let dir = TempDir::new("sloggers_test")?;
+        let logger = FileLoggerBuilder::new(dir.path().join("foo.log"))
+            .rotate_size(128)
+            .rotate_keep(2)
+            .rotate_compress(true)
+            .build()?;
+
+        info!(logger, "hello");
+        thread::sleep(Duration::from_millis(50));
+        assert!(dir.path().join("foo.log").exists());
+        assert!(!dir.path().join("foo.log.1").exists());
+
+        info!(logger, "world");
+        thread::sleep(Duration::from_millis(50));
+        assert!(dir.path().join("foo.log").exists());
+        assert!(dir.path().join("foo.log.1.gz").exists());
+        assert!(!dir.path().join("foo.log.2.gz").exists());
+
+        info!(logger, "vec(0): {:?}", vec![0; 128]);
+        thread::sleep(Duration::from_millis(50));
+        assert!(dir.path().join("foo.log").exists());
+        assert!(dir.path().join("foo.log.1.gz").exists());
+        assert!(dir.path().join("foo.log.2.gz").exists());
+        assert!(!dir.path().join("foo.log.3.gz").exists());
+
+        info!(logger, "vec(1): {:?}", vec![0; 128]);
+        thread::sleep(Duration::from_millis(50));
+        assert!(dir.path().join("foo.log").exists());
+        assert!(dir.path().join("foo.log.1.gz").exists());
+        assert!(dir.path().join("foo.log.2.gz").exists());
+        assert!(!dir.path().join("foo.log.3.gz").exists());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_path_template_to_path() -> Result<()> {
+        let dir = TempDir::new("sloggers_test")?;
+        let path_template = dir
+            .path()
+            .join("foo_{timestamp}.log")
+            .to_str()
+            .ok_or(ErrorKind::Invalid)?
+            .to_string();
         let actual = path_template_to_path(
-            "c:\\temp\\foo_{timestamp}.log",
+            &path_template,
             "%Y%m%d_%H%M",
             TimeZone::Utc, // Local is difficult to test, omitting :(
             Utc.from_utc_datetime(&NaiveDateTime::from_timestamp(1537265991, 0)),
         );
-        let expected = "c:\\temp\\foo_20180918_1019.log";
-        assert_eq!(PathBuf::from(expected), actual);
+        let expected = dir.path().join("foo_20180918_1019.log");
+        assert_eq!(expected, actual);
+
+        Ok(())
     }
 }

@@ -1,6 +1,6 @@
 # sloggers - convenience library for [slog]
 
-[![Crates.io: sloggers](http://meritbadge.herokuapp.com/sloggers)](https://crates.io/crates/sloggers)
+[![Crates.io: sloggers](https://img.shields.io/crates/v/sloggers.svg)](https://crates.io/crates/sloggers)
 [![Documentation](https://docs.rs/sloggers/badge.svg)](https://docs.rs/sloggers)
 [![Build Status](https://travis-ci.org/sile/sloggers.svg?branch=master)](https://travis-ci.org/sile/sloggers)
 [![Code Coverage](https://codecov.io/gh/sile/sloggers/branch/master/graph/badge.svg)](https://codecov.io/gh/sile/sloggers/branch/master)

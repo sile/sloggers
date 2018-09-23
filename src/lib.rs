@@ -46,6 +46,7 @@
 //! # }
 //! ```
 #![warn(missing_docs)]
+extern crate chrono;
 extern crate libflate;
 extern crate serde;
 #[macro_use]

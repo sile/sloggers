@@ -1,4 +1,5 @@
 //! File logger.
+use chrono::{DateTime, Local, TimeZone as ChronoTimeZone, Utc};
 use libflate::gzip::Encoder as GzipEncoder;
 use slog::{Drain, FnValue, Logger};
 use slog_async::Async;
@@ -14,7 +15,7 @@ use std::thread;
 use misc::KVFilterParameters;
 use misc::{module_and_line, timezone_to_timestamp_fn};
 use types::{Format, Severity, SourceLocation, TimeZone};
-use {Build, Config, Result};
+use {Build, Config, ErrorKind, Result};
 
 /// A logger builder which build loggers that write log records to the specified file.
 ///
@@ -174,7 +175,6 @@ impl FileLoggerBuilder {
         }
     }
 }
-
 impl Build for FileLoggerBuilder {
     fn build(&self) -> Result<Logger> {
         let decorator = PlainDecorator::new(self.appender.clone());
@@ -385,7 +385,19 @@ pub struct FileLoggerConfig {
     #[serde(default)]
     pub timezone: TimeZone,
 
-    /// Log file path.
+    /// Format string for the timestamp in the path.
+    /// The string is formatted using [strftime](https://docs.rs/chrono/0.4.6/chrono/format/strftime/index.html#specifiers)
+    ///
+    /// Default: "%Y%m%d_%H%M", example: "20180918_1127"
+    #[serde(default = "default_timestamp_template")]
+    pub timestamp_template: String,
+
+    /// Log file path template.
+    ///
+    /// It will be used as-is, with the following transformation:
+    ///
+    /// All occurrences of the substring "{timestamp}" will be replaced with the current timestamp
+    /// formatted according to `timestamp_template`. The timestamp will respect the `timezone` setting.
     pub path: PathBuf,
 
     /// Asynchronous channel size
@@ -425,7 +437,11 @@ pub struct FileLoggerConfig {
 impl Config for FileLoggerConfig {
     type Builder = FileLoggerBuilder;
     fn try_to_builder(&self) -> Result<Self::Builder> {
-        let mut builder = FileLoggerBuilder::new(&self.path);
+        let now = Utc::now();
+        let path_template = self.path.to_str().ok_or(ErrorKind::Invalid)?;
+        let path =
+            path_template_to_path(path_template, &self.timestamp_template, self.timezone, now);
+        let mut builder = FileLoggerBuilder::new(&path);
         builder.level(self.level);
         builder.format(self.format);
         builder.source_location(self.source_location);
@@ -448,6 +464,7 @@ impl Default for FileLoggerConfig {
             source_location: SourceLocation::default(),
             timezone: TimeZone::default(),
             path: PathBuf::default(),
+            timestamp_template: default_timestamp_template(),
             channel_size: default_channel_size(),
             truncate: false,
             rotate_size: default_rotate_size(),
@@ -455,6 +472,23 @@ impl Default for FileLoggerConfig {
             rotate_compress: false,
         }
     }
+}
+
+fn path_template_to_path(
+    path_template: &str,
+    timestamp_template: &str,
+    timezone: TimeZone,
+    date_time: DateTime<Utc>,
+) -> PathBuf {
+    let timestamp_string = match timezone {
+        TimeZone::Local => {
+            let local_timestamp = Local.from_utc_datetime(&date_time.naive_utc());
+            local_timestamp.format(&timestamp_template)
+        }
+        TimeZone::Utc => date_time.format(&timestamp_template),
+    }.to_string();
+    let path_string = path_template.replace("{timestamp}", &timestamp_string);
+    PathBuf::from(path_string)
 }
 
 fn default_channel_size() -> usize {
@@ -471,23 +505,27 @@ fn default_rotate_keep() -> usize {
     8
 }
 
+fn default_timestamp_template() -> String {
+    "%Y%m%d_%H%M".to_owned()
+}
+
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use Build;
-
+    use chrono::NaiveDateTime;
     use std::thread;
     use std::time::Duration;
     use tempdir::TempDir;
 
+    use super::*;
+    use {Build, ErrorKind, Result};
+
     #[test]
-    fn file_rotation_works() {
-        let dir = TempDir::new("sloggers_test").unwrap();
+    fn file_rotation_works() -> Result<()> {
+        let dir = TempDir::new("sloggers_test")?;
         let logger = FileLoggerBuilder::new(dir.path().join("foo.log"))
             .rotate_size(128)
             .rotate_keep(2)
-            .build()
-            .unwrap();
+            .build()?;
 
         info!(logger, "hello");
         thread::sleep(Duration::from_millis(50));
@@ -513,17 +551,18 @@ mod tests {
         assert!(dir.path().join("foo.log.1").exists());
         assert!(dir.path().join("foo.log.2").exists());
         assert!(!dir.path().join("foo.log.3").exists());
+
+        Ok(())
     }
 
     #[test]
-    fn file_gzip_rotation_works() {
-        let dir = TempDir::new("sloggers_test").unwrap();
+    fn file_gzip_rotation_works() -> Result<()> {
+        let dir = TempDir::new("sloggers_test")?;
         let logger = FileLoggerBuilder::new(dir.path().join("foo.log"))
             .rotate_size(128)
             .rotate_keep(2)
             .rotate_compress(true)
-            .build()
-            .unwrap();
+            .build()?;
 
         info!(logger, "hello");
         thread::sleep(Duration::from_millis(50));
@@ -549,5 +588,28 @@ mod tests {
         assert!(dir.path().join("foo.log.1.gz").exists());
         assert!(dir.path().join("foo.log.2.gz").exists());
         assert!(!dir.path().join("foo.log.3.gz").exists());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_path_template_to_path() -> Result<()> {
+        let dir = TempDir::new("sloggers_test")?;
+        let path_template = dir
+            .path()
+            .join("foo_{timestamp}.log")
+            .to_str()
+            .ok_or(ErrorKind::Invalid)?
+            .to_string();
+        let actual = path_template_to_path(
+            &path_template,
+            "%Y%m%d_%H%M",
+            TimeZone::Utc, // Local is difficult to test, omitting :(
+            Utc.from_utc_datetime(&NaiveDateTime::from_timestamp(1537265991, 0)),
+        );
+        let expected = dir.path().join("foo_20180918_1019.log");
+        assert_eq!(expected, actual);
+
+        Ok(())
     }
 }

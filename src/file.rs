@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use misc::KVFilterParameters;
 use misc::{module_and_line, timezone_to_timestamp_fn};
 use types::{Format, Severity, SourceLocation, TimeZone};
-use {Build, Config, Result};
+use {Build, Config, ErrorKind, Result};
 
 /// A logger builder which build loggers that write log records to the specified file.
 ///
@@ -248,7 +248,7 @@ pub struct FileLoggerConfig {
     ///
     /// All occurrences of the substring "{timestamp}" will be replaced with the current timestamp
     /// formatted according to `timestamp_template`. The timestamp will respect the `timezone` setting.
-    pub path: String,
+    pub path: PathBuf,
 
     /// Asynchronous channel size
     #[serde(default = "default_channel_size")]
@@ -263,7 +263,9 @@ impl Config for FileLoggerConfig {
     type Builder = FileLoggerBuilder;
     fn try_to_builder(&self) -> Result<Self::Builder> {
         let now = Utc::now();
-        let path = path_template_to_path(&self.path, &self.timestamp_template, self.timezone, now);
+        let path_template = self.path.to_str().ok_or(ErrorKind::Invalid)?;
+        let path =
+            path_template_to_path(path_template, &self.timestamp_template, self.timezone, now);
         let mut builder = FileLoggerBuilder::new(&path);
         builder.level(self.level);
         builder.format(self.format);
@@ -304,18 +306,30 @@ fn default_timestamp_template() -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use chrono::NaiveDateTime;
+    use std::io;
+    use tempdir::TempDir;
+
+    use super::*;
 
     #[test]
-    fn test_path_template_to_path() {
+    fn test_path_template_to_path() -> io::Result<()> {
+        let dir = TempDir::new("sloggers_test")?;
+        let path_template = dir
+            .path()
+            .join("foo_{timestamp}.log")
+            .to_str()
+            .ok_or(io::ErrorKind::InvalidInput)?
+            .to_string();
         let actual = path_template_to_path(
-            "c:\\temp\\foo_{timestamp}.log",
+            &path_template,
             "%Y%m%d_%H%M",
             TimeZone::Utc, // Local is difficult to test, omitting :(
             Utc.from_utc_datetime(&NaiveDateTime::from_timestamp(1537265991, 0)),
         );
-        let expected = "c:\\temp\\foo_20180918_1019.log";
-        assert_eq!(PathBuf::from(expected), actual);
+        let expected = dir.path().join("foo_20180918_1019.log");
+        assert_eq!(expected, actual);
+
+        Ok(())
     }
 }

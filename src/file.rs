@@ -5,6 +5,7 @@ use slog::{Drain, FnValue, Logger};
 use slog_async::Async;
 use slog_kvfilter::{KVFilter, KVFilterList};
 use slog_term::{CompactFormat, FullFormat, PlainDecorator};
+use regex::Regex;
 use std::fmt::Debug;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};
@@ -85,11 +86,15 @@ impl FileLoggerBuilder {
         level: Severity,
         only_pass_any_on_all_keys: Option<KVFilterList>,
         always_suppress_any: Option<KVFilterList>,
+        only_pass_on_regex: Option<Regex>,
+        always_suppress_on_regex: Option<Regex>,
     ) -> &mut Self {
         self.kvfilterparameters = Some(KVFilterParameters {
             severity: level,
             only_pass_any_on_all_keys,
             always_suppress_any,
+            only_pass_on_regex,
+            always_suppress_on_regex,
         });
         self
     }
@@ -153,7 +158,9 @@ impl FileLoggerBuilder {
         if let Some(ref p) = self.kvfilterparameters {
             let kvdrain = KVFilter::new(drain, p.severity.as_level())
                 .always_suppress_any(p.always_suppress_any.clone())
-                .only_pass_any_on_all_keys(p.only_pass_any_on_all_keys.clone());
+                .only_pass_any_on_all_keys(p.only_pass_any_on_all_keys.clone())
+                .always_suppress_on_regex(p.always_suppress_on_regex.clone())
+                .only_pass_on_regex(p.only_pass_on_regex.clone());
 
             let drain = self.level.set_level_filter(kvdrain.fuse());
 

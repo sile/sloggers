@@ -46,16 +46,20 @@
 //! # }
 //! ```
 #![warn(missing_docs)]
+extern crate chrono;
+extern crate libflate;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 #[macro_use]
 extern crate slog;
 extern crate slog_async;
+extern crate slog_kvfilter;
 extern crate slog_scope;
 extern crate slog_stdlog;
 extern crate slog_term;
-extern crate slog_kvfilter;
+#[cfg(test)]
+extern crate tempdir;
 #[macro_use]
 extern crate trackable;
 

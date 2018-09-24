@@ -5,10 +5,10 @@ use slog_term;
 use std::io;
 use trackable::error::ErrorKindExt;
 
-use types::TimeZone;
-use {ErrorKind, Result};
 use slog_kvfilter::KVFilterList;
 use types::Severity;
+use types::TimeZone;
+use {ErrorKind, Result};
 
 /// Sets the logger for the log records emitted via `log` crate.
 pub fn set_stdlog_logger(logger: Logger) -> Result<()> {

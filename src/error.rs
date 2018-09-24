@@ -3,9 +3,8 @@ use trackable::error::TrackableError;
 use trackable::error::{ErrorKind as TrackableErrorKind, ErrorKindExt};
 
 /// The error type for this crate.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, TrackableError)]
 pub struct Error(TrackableError<ErrorKind>);
-derive_traits_for_trackable_error_newtype!(Error, ErrorKind);
 impl From<io::Error> for Error {
     fn from(f: io::Error) -> Self {
         ErrorKind::Other.cause(f).into()

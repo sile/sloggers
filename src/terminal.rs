@@ -2,9 +2,7 @@
 use slog::{self, Drain, FnValue, Logger};
 use slog_async::Async;
 use slog_kvfilter::KVFilter;
-use slog_kvfilter::KVFilterList;
 use slog_term::{self, CompactFormat, FullFormat, PlainDecorator, TermDecorator};
-use regex::Regex;
 use std::fmt::Debug;
 use std::io;
 
@@ -81,19 +79,9 @@ impl TerminalLoggerBuilder {
     /// [`KVFilter`]: https://docs.rs/slog-kvfilter/0.6/slog_kvfilter/struct.KVFilter.html
     pub fn kvfilter(
         &mut self,
-        level: Severity,
-        only_pass_any_on_all_keys: Option<KVFilterList>,
-        always_suppress_any: Option<KVFilterList>,
-        always_suppress_on_regex: Option<Regex>,
-        only_pass_on_regex: Option<Regex>,
+        parameters: KVFilterParameters,
     ) -> &mut Self {
-        self.kvfilterparameters = Some(KVFilterParameters {
-            severity: level,
-            only_pass_any_on_all_keys,
-            always_suppress_any,
-            always_suppress_on_regex,
-            only_pass_on_regex,
-        });
+        self.kvfilterparameters = Some(parameters);
         self
     }
 

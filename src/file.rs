@@ -3,9 +3,8 @@ use chrono::{DateTime, Local, TimeZone as ChronoTimeZone, Utc};
 use libflate::gzip::Encoder as GzipEncoder;
 use slog::{Drain, FnValue, Logger};
 use slog_async::Async;
-use slog_kvfilter::{KVFilter, KVFilterList};
+use slog_kvfilter::{KVFilter};
 use slog_term::{CompactFormat, FullFormat, PlainDecorator};
-use regex::Regex;
 use std::fmt::Debug;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};
@@ -83,19 +82,9 @@ impl FileLoggerBuilder {
     /// [`KVFilter`]: https://docs.rs/slog-kvfilter/0.6/slog_kvfilter/struct.KVFilter.html
     pub fn kvfilter(
         &mut self,
-        level: Severity,
-        only_pass_any_on_all_keys: Option<KVFilterList>,
-        always_suppress_any: Option<KVFilterList>,
-        only_pass_on_regex: Option<Regex>,
-        always_suppress_on_regex: Option<Regex>,
+        parameters: KVFilterParameters,
     ) -> &mut Self {
-        self.kvfilterparameters = Some(KVFilterParameters {
-            severity: level,
-            only_pass_any_on_all_keys,
-            always_suppress_any,
-            only_pass_on_regex,
-            always_suppress_on_regex,
-        });
+        self.kvfilterparameters = Some(parameters);
         self
     }
 

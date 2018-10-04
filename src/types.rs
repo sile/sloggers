@@ -74,19 +74,43 @@ impl FromStr for Severity {
     }
 }
 
-/// type summarizing KVFilter parameters
-#[derive(Debug)]
+/// Type summarizing KVFilter parameters.
+///
+/// See the documentation of [`KVFilter`] for more details.
+///
+/// [`KVFilter`]: https://docs.rs/slog-kvfilter/0.6/slog_kvfilter/struct.KVFilter.html
+///
+/// # Examples
+///
+/// ```
+/// use sloggers::types::{KVFilterParameters, Severity};
+///
+/// let params = KVFilterParameters::default();
+/// assert_eq!(params.severity, Severity::Info);
+/// assert!(params.only_pass_any_on_all_keys.is_none());
+/// assert!(params.always_suppress_any.is_none());
+/// assert!(params.only_pass_on_regex.is_none());
+/// assert!(params.always_suppress_on_regex.is_none());
+/// ```
+#[derive(Debug, Clone)]
+#[allow(missing_docs)]
 pub struct KVFilterParameters {
-    /// refer to [`KVFilter`]: https://docs.rs/slog-kvfilter/0.6/slog_kvfilter/struct.KVFilter.html
     pub severity: Severity,
-    /// refer to [`KVFilter`]: https://docs.rs/slog-kvfilter/0.6/slog_kvfilter/struct.KVFilter.html
     pub only_pass_any_on_all_keys: Option<KVFilterList>,
-    /// refer to [`KVFilter`]: https://docs.rs/slog-kvfilter/0.6/slog_kvfilter/struct.KVFilter.html
     pub always_suppress_any: Option<KVFilterList>,
-    /// refer to [`KVFilter`]: https://docs.rs/slog-kvfilter/0.6/slog_kvfilter/struct.KVFilter.html
     pub only_pass_on_regex: Option<Regex>,
-    /// refer to [`KVFilter`]: https://docs.rs/slog-kvfilter/0.6/slog_kvfilter/struct.KVFilter.html
     pub always_suppress_on_regex: Option<Regex>,
+}
+impl Default for KVFilterParameters {
+    fn default() -> Self {
+        KVFilterParameters {
+            severity: Severity::Info,
+            only_pass_any_on_all_keys: None,
+            always_suppress_any: None,
+            only_pass_on_regex: None,
+            always_suppress_on_regex: None,
+        }
+    }
 }
 
 /// The format of log records.

@@ -3,7 +3,7 @@ use chrono::{DateTime, Local, TimeZone as ChronoTimeZone, Utc};
 use libflate::gzip::Encoder as GzipEncoder;
 use slog::{Drain, FnValue, Logger};
 use slog_async::Async;
-use slog_kvfilter::{KVFilter};
+use slog_kvfilter::KVFilter;
 use slog_term::{CompactFormat, FullFormat, PlainDecorator};
 use std::fmt::Debug;
 use std::fs::{self, File, OpenOptions};
@@ -12,8 +12,8 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::thread;
 
-use types::KVFilterParameters;
 use misc::{module_and_line, timezone_to_timestamp_fn};
+use types::KVFilterParameters;
 use types::{Format, Severity, SourceLocation, TimeZone};
 use {Build, Config, ErrorKind, Result};
 
@@ -80,10 +80,7 @@ impl FileLoggerBuilder {
     /// Sets [`KVFilter`].
     ///
     /// [`KVFilter`]: https://docs.rs/slog-kvfilter/0.6/slog_kvfilter/struct.KVFilter.html
-    pub fn kvfilter(
-        &mut self,
-        parameters: KVFilterParameters,
-    ) -> &mut Self {
+    pub fn kvfilter(&mut self, parameters: KVFilterParameters) -> &mut Self {
         self.kvfilterparameters = Some(parameters);
         self
     }

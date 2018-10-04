@@ -6,8 +6,8 @@ use slog_term::{self, CompactFormat, FullFormat, PlainDecorator, TermDecorator};
 use std::fmt::Debug;
 use std::io;
 
-use types::KVFilterParameters;
 use misc::{module_and_line, timezone_to_timestamp_fn};
+use types::KVFilterParameters;
 use types::{Format, Severity, SourceLocation, TimeZone};
 use {Build, Config, Result};
 
@@ -77,10 +77,7 @@ impl TerminalLoggerBuilder {
     /// Sets [`KVFilter`].
     ///
     /// [`KVFilter`]: https://docs.rs/slog-kvfilter/0.6/slog_kvfilter/struct.KVFilter.html
-    pub fn kvfilter(
-        &mut self,
-        parameters: KVFilterParameters,
-    ) -> &mut Self {
+    pub fn kvfilter(&mut self, parameters: KVFilterParameters) -> &mut Self {
         self.kvfilterparameters = Some(parameters);
         self
     }

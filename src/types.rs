@@ -1,8 +1,8 @@
 //! Commonly used types.
-use slog::{Drain, Level, LevelFilter};
-use std::str::FromStr;
-use slog_kvfilter::KVFilterList;
 use regex::Regex;
+use slog::{Drain, Level, LevelFilter};
+use slog_kvfilter::KVFilterList;
+use std::str::FromStr;
 
 use {Error, ErrorKind};
 
@@ -88,7 +88,6 @@ pub struct KVFilterParameters {
     /// refer to [`KVFilter`]: https://docs.rs/slog-kvfilter/0.6/slog_kvfilter/struct.KVFilter.html
     pub always_suppress_on_regex: Option<Regex>,
 }
-
 
 /// The format of log records.
 ///

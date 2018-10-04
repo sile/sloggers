@@ -2,12 +2,11 @@
 use slog::{self, Drain, FnValue, Logger};
 use slog_async::Async;
 use slog_kvfilter::KVFilter;
-use slog_kvfilter::KVFilterList;
 use slog_term::{self, CompactFormat, FullFormat, PlainDecorator, TermDecorator};
 use std::fmt::Debug;
 use std::io;
 
-use misc::KVFilterParameters;
+use types::KVFilterParameters;
 use misc::{module_and_line, timezone_to_timestamp_fn};
 use types::{Format, Severity, SourceLocation, TimeZone};
 use {Build, Config, Result};
@@ -80,15 +79,9 @@ impl TerminalLoggerBuilder {
     /// [`KVFilter`]: https://docs.rs/slog-kvfilter/0.6/slog_kvfilter/struct.KVFilter.html
     pub fn kvfilter(
         &mut self,
-        level: Severity,
-        only_pass_any_on_all_keys: Option<KVFilterList>,
-        always_suppress_any: Option<KVFilterList>,
+        parameters: KVFilterParameters,
     ) -> &mut Self {
-        self.kvfilterparameters = Some(KVFilterParameters {
-            severity: level,
-            only_pass_any_on_all_keys,
-            always_suppress_any,
-        });
+        self.kvfilterparameters = Some(parameters);
         self
     }
 
@@ -106,7 +99,9 @@ impl TerminalLoggerBuilder {
         if let Some(ref p) = self.kvfilterparameters {
             let kvdrain = KVFilter::new(drain, p.severity.as_level())
                 .always_suppress_any(p.always_suppress_any.clone())
-                .only_pass_any_on_all_keys(p.only_pass_any_on_all_keys.clone());
+                .only_pass_any_on_all_keys(p.only_pass_any_on_all_keys.clone())
+                .always_suppress_on_regex(p.always_suppress_on_regex.clone())
+                .only_pass_on_regex(p.only_pass_on_regex.clone());
 
             let drain = self.level.set_level_filter(kvdrain.fuse());
 

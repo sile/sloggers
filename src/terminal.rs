@@ -169,14 +169,14 @@ impl Default for Destination {
     }
 }
 impl Destination {
-    fn to_decorator(&self) -> Decorator {
-        let maybe_term_decorator = match *self {
+    fn to_decorator(self) -> Decorator {
+        let maybe_term_decorator = match self {
             Destination::Stdout => TermDecorator::new().stdout().try_build(),
             Destination::Stderr => TermDecorator::new().stderr().try_build(),
         };
         maybe_term_decorator
             .map(Decorator::Term)
-            .unwrap_or_else(|| match *self {
+            .unwrap_or_else(|| match self {
                 Destination::Stdout => Decorator::PlainStdout(PlainDecorator::new(io::stdout())),
                 Destination::Stderr => Decorator::PlainStderr(PlainDecorator::new(io::stderr())),
             })

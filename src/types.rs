@@ -38,8 +38,8 @@ pub enum Severity {
 }
 impl Severity {
     /// Converts `Severity` to `Level`.
-    pub fn as_level(&self) -> Level {
-        match *self {
+    pub fn as_level(self) -> Level {
+        match self {
             Severity::Trace => Level::Trace,
             Severity::Debug => Level::Debug,
             Severity::Info => Level::Info,
@@ -50,7 +50,7 @@ impl Severity {
     }
 
     /// Sets `LevelFilter` to `drain`.
-    pub fn set_level_filter<D: Drain>(&self, drain: D) -> LevelFilter<D> {
+    pub fn set_level_filter<D: Drain>(self, drain: D) -> LevelFilter<D> {
         LevelFilter::new(drain, self.as_level())
     }
 }

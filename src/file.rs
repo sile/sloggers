@@ -232,7 +232,7 @@ impl FileAppender {
         }
     }
     fn reopen_if_needed(&mut self) -> io::Result<()> {
-        if !self.path.exists() || self.file.is_none() {
+        if self.file.is_none() {
             let mut file_builder = OpenOptions::new();
             file_builder.create(true);
             if self.truncate {

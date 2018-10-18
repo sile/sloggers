@@ -30,6 +30,7 @@ pub struct FileLoggerBuilder {
     channel_size: usize,
     kvfilterparameters: Option<KVFilterParameters>,
 }
+
 impl FileLoggerBuilder {
     /// Makes a new `FileLoggerBuilder` instance.
     ///
@@ -131,9 +132,9 @@ impl FileLoggerBuilder {
     }
 
     fn build_with_drain<D>(&self, drain: D) -> Logger
-    where
-        D: Drain + Send + 'static,
-        D::Err: Debug,
+        where
+            D: Drain + Send + 'static,
+            D::Err: Debug,
     {
         // async inside, level and key value filters outside for speed
         let drain = Async::new(drain.fuse())
@@ -168,6 +169,7 @@ impl FileLoggerBuilder {
         }
     }
 }
+
 impl Build for FileLoggerBuilder {
     fn build(&self) -> Result<Logger> {
         let decorator = PlainDecorator::new(self.appender.clone());
@@ -197,6 +199,7 @@ struct FileAppender {
     rotate_compress: bool,
     wait_compression: Option<mpsc::Receiver<io::Result<()>>>,
 }
+
 impl Clone for FileAppender {
     fn clone(&self) -> Self {
         FileAppender {
@@ -211,6 +214,7 @@ impl Clone for FileAppender {
         }
     }
 }
+
 impl FileAppender {
     pub fn new<P: AsRef<Path>>(path: P) -> Self {
         FileAppender {
@@ -333,6 +337,7 @@ impl FileAppender {
         Ok(())
     }
 }
+
 impl Write for FileAppender {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.reopen_if_needed()?;
@@ -427,6 +432,7 @@ pub struct FileLoggerConfig {
     #[serde(default)]
     pub rotate_compress: bool,
 }
+
 impl Config for FileLoggerConfig {
     type Builder = FileLoggerBuilder;
     fn try_to_builder(&self) -> Result<Self::Builder> {
@@ -449,6 +455,7 @@ impl Config for FileLoggerConfig {
         Ok(builder)
     }
 }
+
 impl Default for FileLoggerConfig {
     fn default() -> Self {
         FileLoggerConfig {
@@ -510,15 +517,15 @@ mod tests {
     use tempdir::TempDir;
 
     use super::*;
-    use {Build, ErrorKind, Result};
+    use {Build, ErrorKind};
 
     #[test]
-    fn file_rotation_works() -> Result<()> {
-        let dir = TempDir::new("sloggers_test")?;
+    fn file_rotation_works() {
+        let dir = TempDir::new("sloggers_test").unwrap();
         let logger = FileLoggerBuilder::new(dir.path().join("foo.log"))
             .rotate_size(128)
             .rotate_keep(2)
-            .build()?;
+            .build().unwrap();
 
         info!(logger, "hello");
         thread::sleep(Duration::from_millis(50));
@@ -544,18 +551,16 @@ mod tests {
         assert!(dir.path().join("foo.log.1").exists());
         assert!(dir.path().join("foo.log.2").exists());
         assert!(!dir.path().join("foo.log.3").exists());
-
-        Ok(())
     }
 
     #[test]
-    fn file_gzip_rotation_works() -> Result<()> {
-        let dir = TempDir::new("sloggers_test")?;
+    fn file_gzip_rotation_works() {
+        let dir = TempDir::new("sloggers_test").unwrap();
         let logger = FileLoggerBuilder::new(dir.path().join("foo.log"))
             .rotate_size(128)
             .rotate_keep(2)
             .rotate_compress(true)
-            .build()?;
+            .build().unwrap();
 
         info!(logger, "hello");
         thread::sleep(Duration::from_millis(50));
@@ -581,18 +586,16 @@ mod tests {
         assert!(dir.path().join("foo.log.1.gz").exists());
         assert!(dir.path().join("foo.log.2.gz").exists());
         assert!(!dir.path().join("foo.log.3.gz").exists());
-
-        Ok(())
     }
 
     #[test]
-    fn test_path_template_to_path() -> Result<()> {
-        let dir = TempDir::new("sloggers_test")?;
+    fn test_path_template_to_path() {
+        let dir = TempDir::new("sloggers_test").unwrap();
         let path_template = dir
             .path()
             .join("foo_{timestamp}.log")
             .to_str()
-            .ok_or(ErrorKind::Invalid)?
+            .ok_or(ErrorKind::Invalid).unwrap()
             .to_string();
         let actual = path_template_to_path(
             &path_template,
@@ -602,7 +605,5 @@ mod tests {
         );
         let expected = dir.path().join("foo_20180918_1019.log");
         assert_eq!(expected, actual);
-
-        Ok(())
     }
 }

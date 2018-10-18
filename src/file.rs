@@ -10,6 +10,7 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
+use std::time::{Duration, Instant};
 use std::thread;
 
 use misc::{module_and_line, timezone_to_timestamp_fn};
@@ -198,6 +199,8 @@ struct FileAppender {
     rotate_keep: usize,
     rotate_compress: bool,
     wait_compression: Option<mpsc::Receiver<io::Result<()>>>,
+    next_reopen_check: Instant,
+    reopen_check_interval: Duration,
 }
 
 impl Clone for FileAppender {
@@ -211,6 +214,8 @@ impl Clone for FileAppender {
             rotate_keep: self.rotate_keep,
             rotate_compress: self.rotate_compress,
             wait_compression: None,
+            next_reopen_check: Instant::now(),
+            reopen_check_interval: self.reopen_check_interval,
         }
     }
 }
@@ -226,10 +231,28 @@ impl FileAppender {
             rotate_keep: default_rotate_keep(),
             rotate_compress: false,
             wait_compression: None,
+            next_reopen_check: Instant::now(),
+            reopen_check_interval: Duration::from_millis(1000),
         }
     }
+
     fn reopen_if_needed(&mut self) -> io::Result<()> {
-        if self.file.is_none() {
+
+        // See issue #18
+        // Basically, path.exists() is VERY slow on windows, so we just
+        // can't check on every write. Limit checking to a predefined interval.
+        // This shouldn't create problems neither for users, nor for logrotate et al.,
+        // as explained in the issue.
+        let now = Instant::now();
+        let path_exists = if now >= self.next_reopen_check {
+            self.next_reopen_check = now + self.reopen_check_interval;
+            self.path.exists()
+        } else {
+//            Pretend the path exists without any actual checking.
+            true
+        };
+
+        if self.file.is_none() || !path_exists {
             let mut file_builder = OpenOptions::new();
             file_builder.create(true);
             if self.truncate {
@@ -244,6 +267,7 @@ impl FileAppender {
         }
         Ok(())
     }
+
     fn rotate(&mut self) -> io::Result<()> {
         if let Some(ref mut rx) = self.wait_compression {
             use std::sync::mpsc::TryRecvError;
@@ -297,6 +321,7 @@ impl FileAppender {
         }
 
         self.written_size = 0;
+        self.next_reopen_check = Instant::now();
         self.reopen_if_needed()?;
 
         Ok(())
@@ -512,12 +537,37 @@ fn default_timestamp_template() -> String {
 #[cfg(test)]
 mod tests {
     use chrono::NaiveDateTime;
+    use std::fs;
     use std::thread;
     use std::time::Duration;
     use tempdir::TempDir;
 
     use super::*;
     use {Build, ErrorKind};
+
+    #[test]
+    fn test_reopen_if_needed() {
+        let dir = TempDir::new("sloggers_test").unwrap();
+        let log_path = &dir.path().join("foo.log");
+        let logger = FileLoggerBuilder::new(log_path).build().unwrap();
+
+        info!(logger, "Goodbye");
+        thread::sleep(Duration::from_millis(50));
+        assert!(log_path.exists());
+        fs::remove_file(log_path).unwrap();
+        assert!(!log_path.exists());
+
+        thread::sleep(Duration::from_millis(100));
+        info!(logger, "cruel");
+        assert!(!log_path.exists()); // next_reopen_check didn't get there yet, "cruel" went into the old file descriptor
+
+        // Now > next_reopen_check, "world" will reopen the file before logging
+        thread::sleep(Duration::from_millis(1000));
+        info!(logger, "world");
+        thread::sleep(Duration::from_millis(50));
+        assert!(log_path.exists());
+        assert!(fs::read_to_string(log_path).unwrap().contains("INFO world"));
+    }
 
     #[test]
     fn file_rotation_works() {

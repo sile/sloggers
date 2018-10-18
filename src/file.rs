@@ -7,7 +7,7 @@ use slog_kvfilter::KVFilter;
 use slog_term::{CompactFormat, FullFormat, PlainDecorator};
 use std::fmt::Debug;
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, Write};
+use std::io::{self, BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
@@ -192,7 +192,7 @@ impl Build for FileLoggerBuilder {
 #[derive(Debug)]
 struct FileAppender {
     path: PathBuf,
-    file: Option<File>,
+    file: Option<BufWriter<File>>,
     truncate: bool,
     written_size: u64,
     rotate_size: u64,
@@ -266,7 +266,7 @@ impl FileAppender {
                 .write(true)
                 .open(&self.path)?;
             self.written_size = file.metadata()?.len();
-            self.file = Some(file);
+            self.file = Some(BufWriter::new(file));
         }
         Ok(())
     }

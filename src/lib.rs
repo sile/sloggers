@@ -62,6 +62,7 @@ extern crate slog_term;
 extern crate tempdir;
 #[macro_use]
 extern crate trackable;
+extern crate regex;
 
 pub use build::{Build, LoggerBuilder};
 pub use config::{Config, LoggerConfig};

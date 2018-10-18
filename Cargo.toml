@@ -1,6 +1,6 @@
 [package]
 name = "sloggers"
-version = "0.2.9"
+version = "0.3.0"
 authors = ["Takeru Ohta <phjgt308@gmail.com>"]
 description = "This library provides frequently used slog loggers and convenient functions"
 homepage = "https://github.com/sile/sloggers"
@@ -22,9 +22,10 @@ slog = "2"
 slog-async = "2"
 slog-term = "2"
 slog-scope = "4"
-slog-kvfilter = "~0.6"
+slog-kvfilter = "~0.7"
 slog-stdlog = "3"
 trackable = "0.2.19"
+regex="1"
 
 [dev-dependencies]
 clap = "2"

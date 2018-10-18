@@ -3,7 +3,7 @@ use chrono::{DateTime, Local, TimeZone as ChronoTimeZone, Utc};
 use libflate::gzip::Encoder as GzipEncoder;
 use slog::{Drain, FnValue, Logger};
 use slog_async::Async;
-use slog_kvfilter::{KVFilter, KVFilterList};
+use slog_kvfilter::KVFilter;
 use slog_term::{CompactFormat, FullFormat, PlainDecorator};
 use std::fmt::Debug;
 use std::fs::{self, File, OpenOptions};
@@ -12,8 +12,8 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::thread;
 
-use misc::KVFilterParameters;
 use misc::{module_and_line, timezone_to_timestamp_fn};
+use types::KVFilterParameters;
 use types::{Format, Severity, SourceLocation, TimeZone};
 use {Build, Config, ErrorKind, Result};
 
@@ -80,17 +80,8 @@ impl FileLoggerBuilder {
     /// Sets [`KVFilter`].
     ///
     /// [`KVFilter`]: https://docs.rs/slog-kvfilter/0.6/slog_kvfilter/struct.KVFilter.html
-    pub fn kvfilter(
-        &mut self,
-        level: Severity,
-        only_pass_any_on_all_keys: Option<KVFilterList>,
-        always_suppress_any: Option<KVFilterList>,
-    ) -> &mut Self {
-        self.kvfilterparameters = Some(KVFilterParameters {
-            severity: level,
-            only_pass_any_on_all_keys,
-            always_suppress_any,
-        });
+    pub fn kvfilter(&mut self, parameters: KVFilterParameters) -> &mut Self {
+        self.kvfilterparameters = Some(parameters);
         self
     }
 
@@ -153,7 +144,9 @@ impl FileLoggerBuilder {
         if let Some(ref p) = self.kvfilterparameters {
             let kvdrain = KVFilter::new(drain, p.severity.as_level())
                 .always_suppress_any(p.always_suppress_any.clone())
-                .only_pass_any_on_all_keys(p.only_pass_any_on_all_keys.clone());
+                .only_pass_any_on_all_keys(p.only_pass_any_on_all_keys.clone())
+                .always_suppress_on_regex(p.always_suppress_on_regex.clone())
+                .only_pass_on_regex(p.only_pass_on_regex.clone());
 
             let drain = self.level.set_level_filter(kvdrain.fuse());
 

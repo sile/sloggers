@@ -258,6 +258,9 @@ impl FileAppender {
             if self.truncate {
                 file_builder.truncate(true);
             }
+            // If the old file was externally deleted and we attempt to open a new one before releasing the old
+            // handle, we get a Permission denied on Windows. Release the handle.
+            self.file = None;
             let file = file_builder
                 .append(!self.truncate)
                 .write(true)

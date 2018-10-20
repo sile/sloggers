@@ -7,9 +7,10 @@ use slog_kvfilter::KVFilter;
 use slog_term::{CompactFormat, FullFormat, PlainDecorator};
 use std::fmt::Debug;
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, Write};
+use std::io::{self, BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
+use std::time::{Duration, Instant};
 use std::thread;
 
 use misc::{module_and_line, timezone_to_timestamp_fn};
@@ -30,6 +31,7 @@ pub struct FileLoggerBuilder {
     channel_size: usize,
     kvfilterparameters: Option<KVFilterParameters>,
 }
+
 impl FileLoggerBuilder {
     /// Makes a new `FileLoggerBuilder` instance.
     ///
@@ -131,9 +133,9 @@ impl FileLoggerBuilder {
     }
 
     fn build_with_drain<D>(&self, drain: D) -> Logger
-    where
-        D: Drain + Send + 'static,
-        D::Err: Debug,
+        where
+            D: Drain + Send + 'static,
+            D::Err: Debug,
     {
         // async inside, level and key value filters outside for speed
         let drain = Async::new(drain.fuse())
@@ -168,6 +170,7 @@ impl FileLoggerBuilder {
         }
     }
 }
+
 impl Build for FileLoggerBuilder {
     fn build(&self) -> Result<Logger> {
         let decorator = PlainDecorator::new(self.appender.clone());
@@ -189,14 +192,17 @@ impl Build for FileLoggerBuilder {
 #[derive(Debug)]
 struct FileAppender {
     path: PathBuf,
-    file: Option<File>,
+    file: Option<BufWriter<File>>,
     truncate: bool,
     written_size: u64,
     rotate_size: u64,
     rotate_keep: usize,
     rotate_compress: bool,
     wait_compression: Option<mpsc::Receiver<io::Result<()>>>,
+    next_reopen_check: Instant,
+    reopen_check_interval: Duration,
 }
+
 impl Clone for FileAppender {
     fn clone(&self) -> Self {
         FileAppender {
@@ -208,9 +214,12 @@ impl Clone for FileAppender {
             rotate_keep: self.rotate_keep,
             rotate_compress: self.rotate_compress,
             wait_compression: None,
+            next_reopen_check: Instant::now(),
+            reopen_check_interval: self.reopen_check_interval,
         }
     }
 }
+
 impl FileAppender {
     pub fn new<P: AsRef<Path>>(path: P) -> Self {
         FileAppender {
@@ -222,24 +231,46 @@ impl FileAppender {
             rotate_keep: default_rotate_keep(),
             rotate_compress: false,
             wait_compression: None,
+            next_reopen_check: Instant::now(),
+            reopen_check_interval: Duration::from_millis(1000),
         }
     }
+
     fn reopen_if_needed(&mut self) -> io::Result<()> {
-        if !self.path.exists() || self.file.is_none() {
+
+        // See issue #18
+        // Basically, path.exists() is VERY slow on windows, so we just
+        // can't check on every write. Limit checking to a predefined interval.
+        // This shouldn't create problems neither for users, nor for logrotate et al.,
+        // as explained in the issue.
+        let now = Instant::now();
+        let path_exists = if now >= self.next_reopen_check {
+            self.next_reopen_check = now + self.reopen_check_interval;
+            self.path.exists()
+        } else {
+//            Pretend the path exists without any actual checking.
+            true
+        };
+
+        if self.file.is_none() || !path_exists {
             let mut file_builder = OpenOptions::new();
             file_builder.create(true);
             if self.truncate {
                 file_builder.truncate(true);
             }
+            // If the old file was externally deleted and we attempt to open a new one before releasing the old
+            // handle, we get a Permission denied on Windows. Release the handle.
+            self.file = None;
             let file = file_builder
                 .append(!self.truncate)
                 .write(true)
                 .open(&self.path)?;
             self.written_size = file.metadata()?.len();
-            self.file = Some(file);
+            self.file = Some(BufWriter::new(file));
         }
         Ok(())
     }
+
     fn rotate(&mut self) -> io::Result<()> {
         if let Some(ref mut rx) = self.wait_compression {
             use std::sync::mpsc::TryRecvError;
@@ -293,6 +324,7 @@ impl FileAppender {
         }
 
         self.written_size = 0;
+        self.next_reopen_check = Instant::now();
         self.reopen_if_needed()?;
 
         Ok(())
@@ -333,6 +365,7 @@ impl FileAppender {
         Ok(())
     }
 }
+
 impl Write for FileAppender {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.reopen_if_needed()?;
@@ -427,6 +460,7 @@ pub struct FileLoggerConfig {
     #[serde(default)]
     pub rotate_compress: bool,
 }
+
 impl Config for FileLoggerConfig {
     type Builder = FileLoggerBuilder;
     fn try_to_builder(&self) -> Result<Self::Builder> {
@@ -449,6 +483,7 @@ impl Config for FileLoggerConfig {
         Ok(builder)
     }
 }
+
 impl Default for FileLoggerConfig {
     fn default() -> Self {
         FileLoggerConfig {
@@ -505,20 +540,45 @@ fn default_timestamp_template() -> String {
 #[cfg(test)]
 mod tests {
     use chrono::NaiveDateTime;
+    use std::fs;
     use std::thread;
     use std::time::Duration;
     use tempdir::TempDir;
 
     use super::*;
-    use {Build, ErrorKind, Result};
+    use {Build, ErrorKind};
 
     #[test]
-    fn file_rotation_works() -> Result<()> {
-        let dir = TempDir::new("sloggers_test")?;
+    fn test_reopen_if_needed() {
+        let dir = TempDir::new("sloggers_test").unwrap();
+        let log_path = &dir.path().join("foo.log");
+        let logger = FileLoggerBuilder::new(log_path).build().unwrap();
+
+        info!(logger, "Goodbye");
+        thread::sleep(Duration::from_millis(50));
+        assert!(log_path.exists());
+        fs::remove_file(log_path).unwrap();
+        assert!(!log_path.exists());
+
+        thread::sleep(Duration::from_millis(100));
+        info!(logger, "cruel");
+        assert!(!log_path.exists()); // next_reopen_check didn't get there yet, "cruel" went into the old file descriptor
+
+        // Now > next_reopen_check, "world" will reopen the file before logging
+        thread::sleep(Duration::from_millis(1000));
+        info!(logger, "world");
+        thread::sleep(Duration::from_millis(50));
+        assert!(log_path.exists());
+        assert!(fs::read_to_string(log_path).unwrap().contains("INFO world"));
+    }
+
+    #[test]
+    fn file_rotation_works() {
+        let dir = TempDir::new("sloggers_test").unwrap();
         let logger = FileLoggerBuilder::new(dir.path().join("foo.log"))
             .rotate_size(128)
             .rotate_keep(2)
-            .build()?;
+            .build().unwrap();
 
         info!(logger, "hello");
         thread::sleep(Duration::from_millis(50));
@@ -544,18 +604,16 @@ mod tests {
         assert!(dir.path().join("foo.log.1").exists());
         assert!(dir.path().join("foo.log.2").exists());
         assert!(!dir.path().join("foo.log.3").exists());
-
-        Ok(())
     }
 
     #[test]
-    fn file_gzip_rotation_works() -> Result<()> {
-        let dir = TempDir::new("sloggers_test")?;
+    fn file_gzip_rotation_works() {
+        let dir = TempDir::new("sloggers_test").unwrap();
         let logger = FileLoggerBuilder::new(dir.path().join("foo.log"))
             .rotate_size(128)
             .rotate_keep(2)
             .rotate_compress(true)
-            .build()?;
+            .build().unwrap();
 
         info!(logger, "hello");
         thread::sleep(Duration::from_millis(50));
@@ -581,18 +639,16 @@ mod tests {
         assert!(dir.path().join("foo.log.1.gz").exists());
         assert!(dir.path().join("foo.log.2.gz").exists());
         assert!(!dir.path().join("foo.log.3.gz").exists());
-
-        Ok(())
     }
 
     #[test]
-    fn test_path_template_to_path() -> Result<()> {
-        let dir = TempDir::new("sloggers_test")?;
+    fn test_path_template_to_path() {
+        let dir = TempDir::new("sloggers_test").unwrap();
         let path_template = dir
             .path()
             .join("foo_{timestamp}.log")
             .to_str()
-            .ok_or(ErrorKind::Invalid)?
+            .ok_or(ErrorKind::Invalid).unwrap()
             .to_string();
         let actual = path_template_to_path(
             &path_template,
@@ -602,7 +658,5 @@ mod tests {
         );
         let expected = dir.path().join("foo_20180918_1019.log");
         assert_eq!(expected, actual);
-
-        Ok(())
     }
 }

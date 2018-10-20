@@ -10,8 +10,8 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
-use std::time::{Duration, Instant};
 use std::thread;
+use std::time::{Duration, Instant};
 
 use misc::{module_and_line, timezone_to_timestamp_fn};
 use types::KVFilterParameters;
@@ -133,9 +133,9 @@ impl FileLoggerBuilder {
     }
 
     fn build_with_drain<D>(&self, drain: D) -> Logger
-        where
-            D: Drain + Send + 'static,
-            D::Err: Debug,
+    where
+        D: Drain + Send + 'static,
+        D::Err: Debug,
     {
         // async inside, level and key value filters outside for speed
         let drain = Async::new(drain.fuse())
@@ -237,7 +237,6 @@ impl FileAppender {
     }
 
     fn reopen_if_needed(&mut self) -> io::Result<()> {
-
         // See issue #18
         // Basically, path.exists() is VERY slow on windows, so we just
         // can't check on every write. Limit checking to a predefined interval.
@@ -248,7 +247,7 @@ impl FileAppender {
             self.next_reopen_check = now + self.reopen_check_interval;
             self.path.exists()
         } else {
-//            Pretend the path exists without any actual checking.
+            // Pretend the path exists without any actual checking.
             true
         };
 
@@ -578,7 +577,8 @@ mod tests {
         let logger = FileLoggerBuilder::new(dir.path().join("foo.log"))
             .rotate_size(128)
             .rotate_keep(2)
-            .build().unwrap();
+            .build()
+            .unwrap();
 
         info!(logger, "hello");
         thread::sleep(Duration::from_millis(50));
@@ -613,7 +613,8 @@ mod tests {
             .rotate_size(128)
             .rotate_keep(2)
             .rotate_compress(true)
-            .build().unwrap();
+            .build()
+            .unwrap();
 
         info!(logger, "hello");
         thread::sleep(Duration::from_millis(50));
@@ -648,7 +649,8 @@ mod tests {
             .path()
             .join("foo_{timestamp}.log")
             .to_str()
-            .ok_or(ErrorKind::Invalid).unwrap()
+            .ok_or(ErrorKind::Invalid)
+            .unwrap()
             .to_string();
         let actual = path_template_to_path(
             &path_template,

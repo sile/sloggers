@@ -292,7 +292,7 @@ impl FileAppender {
 
         let _ = self.file.take();
 
-        for i in (1..self.rotate_keep + 1).rev() {
+        for i in (1..=self.rotate_keep).rev() {
             let from = self.rotated_path(i)?;
             let to = self.rotated_path(i + 1)?;
             if from.exists() {

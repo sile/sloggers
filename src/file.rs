@@ -13,9 +13,9 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use misc::{module_and_line, timezone_to_timestamp_fn};
+use misc::{module_and_line, timezone_to_timestamp_fn, getpid};
 use types::KVFilterParameters;
-use types::{Format, Severity, SourceLocation, TimeZone};
+use types::{Format, Severity, SourceLocation, ProcessID, TimeZone};
 use {Build, Config, ErrorKind, Result};
 
 /// A logger builder which build loggers that write log records to the specified file.
@@ -25,6 +25,7 @@ use {Build, Config, ErrorKind, Result};
 pub struct FileLoggerBuilder {
     format: Format,
     source_location: SourceLocation,
+    processid: ProcessID,
     timezone: TimeZone,
     level: Severity,
     appender: FileAppender,
@@ -41,6 +42,7 @@ impl FileLoggerBuilder {
         FileLoggerBuilder {
             format: Format::default(),
             source_location: SourceLocation::default(),
+            processid: ProcessID::default(),
             timezone: TimeZone::default(),
             level: Severity::default(),
             appender: FileAppender::new(path),
@@ -58,6 +60,12 @@ impl FileLoggerBuilder {
     /// Sets the source code location type this logger will use.
     pub fn source_location(&mut self, source_location: SourceLocation) -> &mut Self {
         self.source_location = source_location;
+        self
+    }
+
+    /// Sets the process id this logger will use.
+    pub fn processid(&mut self, processid: ProcessID) -> &mut Self {
+        self.processid = processid;
         self
     }
 
@@ -133,9 +141,9 @@ impl FileLoggerBuilder {
     }
 
     fn build_with_drain<D>(&self, drain: D) -> Logger
-    where
-        D: Drain + Send + 'static,
-        D::Err: Debug,
+        where
+            D: Drain + Send + 'static,
+            D::Err: Debug,
     {
         // async inside, level and key value filters outside for speed
         let drain = Async::new(drain.fuse())
@@ -152,20 +160,40 @@ impl FileLoggerBuilder {
 
             let drain = self.level.set_level_filter(kvdrain.fuse());
 
-            match self.source_location {
-                SourceLocation::None => Logger::root(drain.fuse(), o!()),
-                SourceLocation::ModuleAndLine => {
-                    Logger::root(drain.fuse(), o!("module" => FnValue(module_and_line)))
-                }
+            match (self.source_location, self.processid) {
+                (SourceLocation::None, ProcessID::None) => Logger::root(drain.fuse(), o!()),
+                (SourceLocation::ModuleAndLine, ProcessID::None) =>
+                    Logger::root(drain.fuse(), o!(
+                       "module" => FnValue(module_and_line),
+                    )),
+                (SourceLocation::None, ProcessID::ProcessID) =>
+                    Logger::root(drain.fuse(), o!(
+                       "pid" => FnValue(getpid),
+                    )),
+                (SourceLocation::ModuleAndLine, ProcessID::ProcessID) =>
+                    Logger::root(drain.fuse(), o!(
+                       "module" => FnValue(module_and_line),
+                       "pid" => FnValue(getpid),
+                    )),
             }
         } else {
             let drain = self.level.set_level_filter(drain.fuse());
 
-            match self.source_location {
-                SourceLocation::None => Logger::root(drain.fuse(), o!()),
-                SourceLocation::ModuleAndLine => {
-                    Logger::root(drain.fuse(), o!("module" => FnValue(module_and_line)))
-                }
+            match (self.source_location, self.processid) {
+                (SourceLocation::None, ProcessID::None) => Logger::root(drain.fuse(), o!()),
+                (SourceLocation::ModuleAndLine, ProcessID::None) =>
+                    Logger::root(drain.fuse(), o!(
+                       "module" => FnValue(module_and_line),
+                    )),
+                (SourceLocation::None, ProcessID::ProcessID) =>
+                    Logger::root(drain.fuse(), o!(
+                       "pid" => FnValue(getpid),
+                    )),
+                (SourceLocation::ModuleAndLine, ProcessID::ProcessID) =>
+                    Logger::root(drain.fuse(), o!(
+                       "module" => FnValue(module_and_line),
+                       "pid" => FnValue(getpid),
+                    )),
             }
         }
     }
@@ -406,6 +434,10 @@ pub struct FileLoggerConfig {
     #[serde(default)]
     pub source_location: SourceLocation,
 
+    /// process ID
+    #[serde(default)]
+    pub processid: ProcessID,
+
     /// Time Zone.
     #[serde(default)]
     pub timezone: TimeZone,
@@ -471,6 +503,7 @@ impl Config for FileLoggerConfig {
         builder.level(self.level);
         builder.format(self.format);
         builder.source_location(self.source_location);
+        builder.processid(self.processid);
         builder.timezone(self.timezone);
         builder.channel_size(self.channel_size);
         builder.rotate_size(self.rotate_size);
@@ -489,6 +522,7 @@ impl Default for FileLoggerConfig {
             level: Severity::default(),
             format: Format::default(),
             source_location: SourceLocation::default(),
+            processid: ProcessID::default(),
             timezone: TimeZone::default(),
             path: PathBuf::default(),
             timestamp_template: default_timestamp_template(),

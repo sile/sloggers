@@ -220,3 +220,41 @@ impl FromStr for SourceLocation {
         }
     }
 }
+
+/// Process ID.
+///
+/// # Examples
+///
+/// The default value:
+///
+/// ```
+/// use sloggers::types::ProcessID;
+///
+/// assert_eq!(ProcessID::default(), ProcessID::ProcessID);
+/// ```
+#[allow(missing_docs)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProcessID {
+    None,
+    ProcessID,
+}
+impl Default for ProcessID {
+    fn default() -> Self {
+        ProcessID::ProcessID
+    }
+}
+impl FromStr for ProcessID {
+    type Err = Error;
+    fn from_str(s: &str) -> Result<Self, Error> {
+        match s {
+            "none" => Ok(ProcessID::None),
+            "id" => Ok(ProcessID::ProcessID),
+            _ => track_panic!(
+                ErrorKind::Invalid,
+                "Undefined process ID: {:?}",
+                s
+            ),
+        }
+    }
+}

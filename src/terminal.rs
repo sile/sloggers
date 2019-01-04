@@ -6,9 +6,9 @@ use slog_term::{self, CompactFormat, FullFormat, PlainDecorator, TermDecorator};
 use std::fmt::Debug;
 use std::io;
 
-use misc::{module_and_line, timezone_to_timestamp_fn};
+use misc::{module_and_line, timezone_to_timestamp_fn, getpid};
 use types::KVFilterParameters;
-use types::{Format, Severity, SourceLocation, TimeZone};
+use types::{Format, Severity, SourceLocation, ProcessID, TimeZone};
 use {Build, Config, Result};
 
 /// A logger builder which build loggers that output log records to the terminal.
@@ -18,6 +18,7 @@ use {Build, Config, Result};
 pub struct TerminalLoggerBuilder {
     format: Format,
     source_location: SourceLocation,
+    processid: ProcessID,
     timezone: TimeZone,
     destination: Destination,
     level: Severity,
@@ -30,6 +31,7 @@ impl TerminalLoggerBuilder {
         TerminalLoggerBuilder {
             format: Format::default(),
             source_location: SourceLocation::default(),
+            processid: ProcessID::default(),
             timezone: TimeZone::default(),
             destination: Destination::default(),
             level: Severity::default(),
@@ -47,6 +49,12 @@ impl TerminalLoggerBuilder {
     /// Sets the source code location type this logger will use.
     pub fn source_location(&mut self, source_location: SourceLocation) -> &mut Self {
         self.source_location = source_location;
+        self
+    }
+
+    /// Sets the source code location type this logger will use.
+    pub fn processid(&mut self, processid: ProcessID) -> &mut Self {
+        self.processid = processid;
         self
     }
 
@@ -102,20 +110,40 @@ impl TerminalLoggerBuilder {
 
             let drain = self.level.set_level_filter(kvdrain.fuse());
 
-            match self.source_location {
-                SourceLocation::None => Logger::root(drain.fuse(), o!()),
-                SourceLocation::ModuleAndLine => {
-                    Logger::root(drain.fuse(), o!("module" => FnValue(module_and_line)))
-                }
+            match (self.source_location, self.processid) {
+                (SourceLocation::None, ProcessID::None) => Logger::root(drain.fuse(), o!()),
+                (SourceLocation::ModuleAndLine, ProcessID::None) =>
+                    Logger::root(drain.fuse(), o!(
+                       "module" => FnValue(module_and_line),
+                    )),
+                (SourceLocation::None, ProcessID::ProcessID) =>
+                    Logger::root(drain.fuse(), o!(
+                       "pid" => FnValue(getpid),
+                    )),
+                (SourceLocation::ModuleAndLine, ProcessID::ProcessID) =>
+                    Logger::root(drain.fuse(), o!(
+                       "module" => FnValue(module_and_line),
+                       "pid" => FnValue(getpid),
+                    )),
             }
         } else {
             let drain = self.level.set_level_filter(drain.fuse());
 
-            match self.source_location {
-                SourceLocation::None => Logger::root(drain.fuse(), o!()),
-                SourceLocation::ModuleAndLine => {
-                    Logger::root(drain.fuse(), o!("module" => FnValue(module_and_line)))
-                }
+            match (self.source_location, self.processid) {
+                (SourceLocation::None, ProcessID::None) => Logger::root(drain.fuse(), o!()),
+                (SourceLocation::ModuleAndLine, ProcessID::None) =>
+                    Logger::root(drain.fuse(), o!(
+                       "module" => FnValue(module_and_line),
+                    )),
+                (SourceLocation::None, ProcessID::ProcessID) =>
+                    Logger::root(drain.fuse(), o!(
+                       "pid" => FnValue(getpid),
+                    )),
+                (SourceLocation::ModuleAndLine, ProcessID::ProcessID) =>
+                    Logger::root(drain.fuse(), o!(
+                       "module" => FnValue(module_and_line),
+                       "pid" => FnValue(getpid),
+                    )),
             }
         }
     }
@@ -221,6 +249,10 @@ pub struct TerminalLoggerConfig {
     #[serde(default)]
     pub source_location: SourceLocation,
 
+    /// process ID
+    #[serde(default)]
+    pub processid: ProcessID,
+
     /// Time Zone.
     #[serde(default)]
     pub timezone: TimeZone,
@@ -240,6 +272,7 @@ impl Config for TerminalLoggerConfig {
         builder.level(self.level);
         builder.format(self.format);
         builder.source_location(self.source_location);
+        builder.processid(self.processid);
         builder.timezone(self.timezone);
         builder.destination(self.destination);
         builder.channel_size(self.channel_size);

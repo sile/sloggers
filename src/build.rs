@@ -13,6 +13,7 @@ pub trait Build {
 
 /// Logger builder.
 #[derive(Debug)]
+#[cfg_attr(feature = "cargo-clippy", allow(large_enum_variant))]
 pub enum LoggerBuilder {
     /// File logger.
     File(FileLoggerBuilder),

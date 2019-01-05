@@ -1,12 +1,11 @@
 //! Terminal logger.
-use slog::{self, Drain, FnValue, Logger};
+use slog::{self, Drain, Logger};
 use slog_async::Async;
-use slog_kvfilter::KVFilter;
 use slog_term::{self, CompactFormat, FullFormat, PlainDecorator, TermDecorator};
 use std::fmt::Debug;
 use std::io;
 
-use misc::{module_and_line, timezone_to_timestamp_fn, getpid};
+use misc::{timezone_to_timestamp_fn, build_with_options};
 use types::KVFilterParameters;
 use types::{Format, Severity, SourceLocation, ProcessID, TimeZone};
 use {Build, Config, Result};
@@ -18,7 +17,7 @@ use {Build, Config, Result};
 pub struct TerminalLoggerBuilder {
     format: Format,
     source_location: SourceLocation,
-    processid: ProcessID,
+    process_id: ProcessID,
     timezone: TimeZone,
     destination: Destination,
     level: Severity,
@@ -31,7 +30,7 @@ impl TerminalLoggerBuilder {
         TerminalLoggerBuilder {
             format: Format::default(),
             source_location: SourceLocation::default(),
-            processid: ProcessID::default(),
+            process_id: ProcessID::default(),
             timezone: TimeZone::default(),
             destination: Destination::default(),
             level: Severity::default(),
@@ -52,9 +51,9 @@ impl TerminalLoggerBuilder {
         self
     }
 
-    /// Sets the source code location type this logger will use.
-    pub fn processid(&mut self, processid: ProcessID) -> &mut Self {
-        self.processid = processid;
+    /// Sets whether process ID will be included in values
+    pub fn process_id(&mut self, process_id: ProcessID) -> &mut Self {
+        self.process_id = process_id;
         self
     }
 
@@ -101,51 +100,11 @@ impl TerminalLoggerBuilder {
             .build()
             .fuse();
 
-        if let Some(ref p) = self.kvfilterparameters {
-            let kvdrain = KVFilter::new(drain, p.severity.as_level())
-                .always_suppress_any(p.always_suppress_any.clone())
-                .only_pass_any_on_all_keys(p.only_pass_any_on_all_keys.clone())
-                .always_suppress_on_regex(p.always_suppress_on_regex.clone())
-                .only_pass_on_regex(p.only_pass_on_regex.clone());
-
-            let drain = self.level.set_level_filter(kvdrain.fuse());
-
-            match (self.source_location, self.processid) {
-                (SourceLocation::None, ProcessID::None) => Logger::root(drain.fuse(), o!()),
-                (SourceLocation::ModuleAndLine, ProcessID::None) =>
-                    Logger::root(drain.fuse(), o!(
-                       "module" => FnValue(module_and_line),
-                    )),
-                (SourceLocation::None, ProcessID::ProcessID) =>
-                    Logger::root(drain.fuse(), o!(
-                       "pid" => FnValue(getpid),
-                    )),
-                (SourceLocation::ModuleAndLine, ProcessID::ProcessID) =>
-                    Logger::root(drain.fuse(), o!(
-                       "module" => FnValue(module_and_line),
-                       "pid" => FnValue(getpid),
-                    )),
-            }
-        } else {
-            let drain = self.level.set_level_filter(drain.fuse());
-
-            match (self.source_location, self.processid) {
-                (SourceLocation::None, ProcessID::None) => Logger::root(drain.fuse(), o!()),
-                (SourceLocation::ModuleAndLine, ProcessID::None) =>
-                    Logger::root(drain.fuse(), o!(
-                       "module" => FnValue(module_and_line),
-                    )),
-                (SourceLocation::None, ProcessID::ProcessID) =>
-                    Logger::root(drain.fuse(), o!(
-                       "pid" => FnValue(getpid),
-                    )),
-                (SourceLocation::ModuleAndLine, ProcessID::ProcessID) =>
-                    Logger::root(drain.fuse(), o!(
-                       "module" => FnValue(module_and_line),
-                       "pid" => FnValue(getpid),
-                    )),
-            }
-        }
+	    build_with_options(drain,
+	                       self.level,
+	                       &self.kvfilterparameters,
+	                       self.source_location,
+	                       self.process_id)
     }
 }
 impl Default for TerminalLoggerBuilder {
@@ -251,7 +210,7 @@ pub struct TerminalLoggerConfig {
 
     /// process ID
     #[serde(default)]
-    pub processid: ProcessID,
+    pub process_id: ProcessID,
 
     /// Time Zone.
     #[serde(default)]
@@ -272,7 +231,7 @@ impl Config for TerminalLoggerConfig {
         builder.level(self.level);
         builder.format(self.format);
         builder.source_location(self.source_location);
-        builder.processid(self.processid);
+        builder.process_id(self.process_id);
         builder.timezone(self.timezone);
         builder.destination(self.destination);
         builder.channel_size(self.channel_size);

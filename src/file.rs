@@ -1,9 +1,8 @@
 //! File logger.
 use chrono::{DateTime, Local, TimeZone as ChronoTimeZone, Utc};
 use libflate::gzip::Encoder as GzipEncoder;
-use slog::{Drain, FnValue, Logger};
+use slog::{Drain, Logger};
 use slog_async::Async;
-use slog_kvfilter::KVFilter;
 use slog_term::{CompactFormat, FullFormat, PlainDecorator};
 use std::fmt::Debug;
 use std::fs::{self, File, OpenOptions};
@@ -13,7 +12,7 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use misc::{module_and_line, timezone_to_timestamp_fn, getpid};
+use misc::{timezone_to_timestamp_fn, build_with_options};
 use types::KVFilterParameters;
 use types::{Format, Severity, SourceLocation, ProcessID, TimeZone};
 use {Build, Config, ErrorKind, Result};
@@ -25,7 +24,7 @@ use {Build, Config, ErrorKind, Result};
 pub struct FileLoggerBuilder {
     format: Format,
     source_location: SourceLocation,
-    processid: ProcessID,
+    process_id: ProcessID,
     timezone: TimeZone,
     level: Severity,
     appender: FileAppender,
@@ -34,75 +33,75 @@ pub struct FileLoggerBuilder {
 }
 
 impl FileLoggerBuilder {
-    /// Makes a new `FileLoggerBuilder` instance.
+	/// Makes a new `FileLoggerBuilder` instance.
     ///
     /// This builder will create a logger which uses `path` as
     /// the output destination of the log records.
-    pub fn new<P: AsRef<Path>>(path: P) -> Self {
-        FileLoggerBuilder {
-            format: Format::default(),
-            source_location: SourceLocation::default(),
-            processid: ProcessID::default(),
-            timezone: TimeZone::default(),
-            level: Severity::default(),
-            appender: FileAppender::new(path),
-            channel_size: 1024,
-            kvfilterparameters: None,
-        }
-    }
+	pub fn new<P: AsRef<Path>>(path: P) -> Self {
+		FileLoggerBuilder {
+			format: Format::default(),
+			source_location: SourceLocation::default(),
+			process_id: ProcessID::default(),
+			timezone: TimeZone::default(),
+			level: Severity::default(),
+			appender: FileAppender::new(path),
+			channel_size: 1024,
+			kvfilterparameters: None,
+		}
+	}
 
-    /// Sets the format of log records.
-    pub fn format(&mut self, format: Format) -> &mut Self {
-        self.format = format;
-        self
-    }
+	/// Sets the format of log records.
+	pub fn format(&mut self, format: Format) -> &mut Self {
+		self.format = format;
+		self
+	}
 
-    /// Sets the source code location type this logger will use.
-    pub fn source_location(&mut self, source_location: SourceLocation) -> &mut Self {
-        self.source_location = source_location;
-        self
-    }
+	/// Sets the source code location type this logger will use.
+	pub fn source_location(&mut self, source_location: SourceLocation) -> &mut Self {
+		self.source_location = source_location;
+		self
+	}
 
-    /// Sets the process id this logger will use.
-    pub fn processid(&mut self, processid: ProcessID) -> &mut Self {
-        self.processid = processid;
-        self
-    }
+    /// Sets whether process ID will be included in values
+    pub fn process_id(&mut self, process_id: ProcessID) -> &mut Self {
+		self.process_id = process_id;
+		self
+	}
 
-    /// Sets the time zone which this logger will use.
-    pub fn timezone(&mut self, timezone: TimeZone) -> &mut Self {
-        self.timezone = timezone;
-        self
-    }
+	/// Sets the time zone which this logger will use.
+	pub fn timezone(&mut self, timezone: TimeZone) -> &mut Self {
+		self.timezone = timezone;
+		self
+	}
 
-    /// Sets the log level of this logger.
-    pub fn level(&mut self, severity: Severity) -> &mut Self {
-        self.level = severity;
-        self
-    }
+	/// Sets the log level of this logger.
+	pub fn level(&mut self, severity: Severity) -> &mut Self {
+		self.level = severity;
+		self
+	}
 
-    /// Sets the size of the asynchronous channel of this logger.
-    pub fn channel_size(&mut self, channel_size: usize) -> &mut Self {
-        self.channel_size = channel_size;
-        self
-    }
+	/// Sets the size of the asynchronous channel of this logger.
+	pub fn channel_size(&mut self, channel_size: usize) -> &mut Self {
+		self.channel_size = channel_size;
+		self
+	}
 
-    /// Sets [`KVFilter`].
+	/// Sets [`KVFilter`].
     ///
     /// [`KVFilter`]: https://docs.rs/slog-kvfilter/0.6/slog_kvfilter/struct.KVFilter.html
-    pub fn kvfilter(&mut self, parameters: KVFilterParameters) -> &mut Self {
-        self.kvfilterparameters = Some(parameters);
-        self
-    }
+	pub fn kvfilter(&mut self, parameters: KVFilterParameters) -> &mut Self {
+		self.kvfilterparameters = Some(parameters);
+		self
+	}
 
-    /// By default, logger just appends log messages to file.
+	/// By default, logger just appends log messages to file.
     /// If this method called, logger truncates the file to 0 length when opening.
-    pub fn truncate(&mut self) -> &mut Self {
-        self.appender.truncate = true;
-        self
-    }
+	pub fn truncate(&mut self) -> &mut Self {
+		self.appender.truncate = true;
+		self
+	}
 
-    /// Sets the threshold used for determining whether rotate the current log file.
+	/// Sets the threshold used for determining whether rotate the current log file.
     ///
     /// If the byte size of the current log file exceeds this value, the file will be rotated.
     /// The name of the rotated file will be `"${ORIGINAL_FILE_NAME}.0"`.
@@ -114,89 +113,49 @@ impl FileLoggerBuilder {
     /// The default value is `std::u64::MAX`.
     ///
     /// [`rotate_keep`]: ./struct.FileLoggerBuilder.html#method.rotate_keep
-    pub fn rotate_size(&mut self, size: u64) -> &mut Self {
-        self.appender.rotate_size = size;
-        self
-    }
+	pub fn rotate_size(&mut self, size: u64) -> &mut Self {
+		self.appender.rotate_size = size;
+		self
+	}
 
-    /// Sets the maximum number of rotated log files to keep.
+	/// Sets the maximum number of rotated log files to keep.
     ///
     /// If the number of rotated log files exceed this value, the oldest log file will be deleted.
     ///
     /// The default value is `8`.
-    pub fn rotate_keep(&mut self, count: usize) -> &mut Self {
-        self.appender.rotate_keep = count;
-        self
-    }
+	pub fn rotate_keep(&mut self, count: usize) -> &mut Self {
+		self.appender.rotate_keep = count;
+		self
+	}
 
-    /// Sets whether to compress or not compress rotated files.
+	/// Sets whether to compress or not compress rotated files.
     ///
     /// If `true` is specified, rotated files will be compressed by GZIP algorithm and
     /// the suffix ".gz" will be appended to those file names.
     ///
     /// The default value is `false`.
-    pub fn rotate_compress(&mut self, compress: bool) -> &mut Self {
-        self.appender.rotate_compress = compress;
-        self
-    }
+	pub fn rotate_compress(&mut self, compress: bool) -> &mut Self {
+		self.appender.rotate_compress = compress;
+		self
+	}
 
-    fn build_with_drain<D>(&self, drain: D) -> Logger
-        where
-            D: Drain + Send + 'static,
-            D::Err: Debug,
-    {
-        // async inside, level and key value filters outside for speed
-        let drain = Async::new(drain.fuse())
-            .chan_size(self.channel_size)
-            .build()
-            .fuse();
+	fn build_with_drain<D>(&self, drain: D) -> Logger
+		where
+			D: Drain + Send + 'static,
+			D::Err: Debug,
+	{
+		// async inside, level and key value filters outside for speed
+		let drain = Async::new(drain.fuse())
+			.chan_size(self.channel_size)
+			.build()
+			.fuse();
 
-        if let Some(ref p) = self.kvfilterparameters {
-            let kvdrain = KVFilter::new(drain, p.severity.as_level())
-                .always_suppress_any(p.always_suppress_any.clone())
-                .only_pass_any_on_all_keys(p.only_pass_any_on_all_keys.clone())
-                .always_suppress_on_regex(p.always_suppress_on_regex.clone())
-                .only_pass_on_regex(p.only_pass_on_regex.clone());
-
-            let drain = self.level.set_level_filter(kvdrain.fuse());
-
-            match (self.source_location, self.processid) {
-                (SourceLocation::None, ProcessID::None) => Logger::root(drain.fuse(), o!()),
-                (SourceLocation::ModuleAndLine, ProcessID::None) =>
-                    Logger::root(drain.fuse(), o!(
-                       "module" => FnValue(module_and_line),
-                    )),
-                (SourceLocation::None, ProcessID::ProcessID) =>
-                    Logger::root(drain.fuse(), o!(
-                       "pid" => FnValue(getpid),
-                    )),
-                (SourceLocation::ModuleAndLine, ProcessID::ProcessID) =>
-                    Logger::root(drain.fuse(), o!(
-                       "module" => FnValue(module_and_line),
-                       "pid" => FnValue(getpid),
-                    )),
-            }
-        } else {
-            let drain = self.level.set_level_filter(drain.fuse());
-
-            match (self.source_location, self.processid) {
-                (SourceLocation::None, ProcessID::None) => Logger::root(drain.fuse(), o!()),
-                (SourceLocation::ModuleAndLine, ProcessID::None) =>
-                    Logger::root(drain.fuse(), o!(
-                       "module" => FnValue(module_and_line),
-                    )),
-                (SourceLocation::None, ProcessID::ProcessID) =>
-                    Logger::root(drain.fuse(), o!(
-                       "pid" => FnValue(getpid),
-                    )),
-                (SourceLocation::ModuleAndLine, ProcessID::ProcessID) =>
-                    Logger::root(drain.fuse(), o!(
-                       "module" => FnValue(module_and_line),
-                       "pid" => FnValue(getpid),
-                    )),
-            }
-        }
-    }
+		build_with_options(drain,
+		                   self.level,
+		                   &self.kvfilterparameters,
+		                   self.source_location,
+		                   self.process_id)
+	}
 }
 
 impl Build for FileLoggerBuilder {
@@ -436,7 +395,7 @@ pub struct FileLoggerConfig {
 
     /// process ID
     #[serde(default)]
-    pub processid: ProcessID,
+    pub process_id: ProcessID,
 
     /// Time Zone.
     #[serde(default)]
@@ -503,7 +462,7 @@ impl Config for FileLoggerConfig {
         builder.level(self.level);
         builder.format(self.format);
         builder.source_location(self.source_location);
-        builder.processid(self.processid);
+        builder.process_id(self.process_id);
         builder.timezone(self.timezone);
         builder.channel_size(self.channel_size);
         builder.rotate_size(self.rotate_size);
@@ -522,7 +481,7 @@ impl Default for FileLoggerConfig {
             level: Severity::default(),
             format: Format::default(),
             source_location: SourceLocation::default(),
-            processid: ProcessID::default(),
+            process_id: ProcessID::default(),
             timezone: TimeZone::default(),
             path: PathBuf::default(),
             timestamp_template: default_timestamp_template(),

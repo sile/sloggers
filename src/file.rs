@@ -451,7 +451,7 @@ pub struct FileLoggerConfig {
 
     /// Whether to compress or not compress rotated files.
     ///
-    /// For details, see the documentation of [`rotate_keep`].
+    /// For details, see the documentation of [`rotate_compress`].
     ///
     /// [`rotate_compress`]: ./struct.FileLoggerBuilder.html#method.rotate_compress
     ///
@@ -513,7 +513,8 @@ fn path_template_to_path(
             local_timestamp.format(&timestamp_template)
         }
         TimeZone::Utc => date_time.format(&timestamp_template),
-    }.to_string();
+    }
+    .to_string();
     let path_string = path_template.replace("{timestamp}", &timestamp_string);
     PathBuf::from(path_string)
 }

@@ -8,7 +8,7 @@ use std::io;
 
 use misc::{module_and_line, timezone_to_timestamp_fn};
 use types::KVFilterParameters;
-use types::{Format, Severity, SourceLocation, TimeZone};
+use types::{Format, OverflowStrategy, Severity, SourceLocation, TimeZone};
 use {Build, Config, Result};
 
 /// A logger builder which build loggers that output log records to the terminal.
@@ -20,6 +20,7 @@ pub struct TerminalLoggerBuilder {
     source_location: SourceLocation,
     timezone: TimeZone,
     destination: Destination,
+    overflow_strategy: OverflowStrategy,
     level: Severity,
     channel_size: usize,
     kvfilterparameters: Option<KVFilterParameters>,
@@ -30,6 +31,7 @@ impl TerminalLoggerBuilder {
         TerminalLoggerBuilder {
             format: Format::default(),
             source_location: SourceLocation::default(),
+            overflow_strategy: OverflowStrategy::default(),
             timezone: TimeZone::default(),
             destination: Destination::default(),
             level: Severity::default(),
@@ -47,6 +49,12 @@ impl TerminalLoggerBuilder {
     /// Sets the source code location type this logger will use.
     pub fn source_location(&mut self, source_location: SourceLocation) -> &mut Self {
         self.source_location = source_location;
+        self
+    }
+
+    /// Sets the overflow strategy for the logger.
+    pub fn overflow_strategy(&mut self, overflow_strategy: OverflowStrategy) -> &mut Self {
+        self.overflow_strategy = overflow_strategy;
         self
     }
 
@@ -90,6 +98,7 @@ impl TerminalLoggerBuilder {
         // async inside, level and key value filters outside for speed
         let drain = Async::new(drain.fuse())
             .chan_size(self.channel_size)
+            .overflow_strategy(self.overflow_strategy.to_async_type())
             .build()
             .fuse();
 
@@ -232,6 +241,14 @@ pub struct TerminalLoggerConfig {
     /// Asynchronous channel size
     #[serde(default = "default_channel_size")]
     pub channel_size: usize,
+
+    /// Whether to drop logs on overflow.
+    ///
+    /// The possible values are `drop`, `drop_and_report`, or `block`.
+    ///
+    /// The default value is `drop_and_report`.
+    #[serde(default)]
+    pub overflow_strategy: OverflowStrategy,
 }
 impl Config for TerminalLoggerConfig {
     type Builder = TerminalLoggerBuilder;
@@ -243,6 +260,7 @@ impl Config for TerminalLoggerConfig {
         builder.timezone(self.timezone);
         builder.destination(self.destination);
         builder.channel_size(self.channel_size);
+        builder.overflow_strategy(self.overflow_strategy);
         Ok(builder)
     }
 }

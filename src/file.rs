@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 
 use misc::{module_and_line, timezone_to_timestamp_fn};
 use types::KVFilterParameters;
-use types::{Format, Severity, SourceLocation, TimeZone};
+use types::{Format, OverflowStrategy, Severity, SourceLocation, TimeZone};
 use {Build, Config, ErrorKind, Result};
 
 /// A logger builder which build loggers that write log records to the specified file.
@@ -25,6 +25,7 @@ use {Build, Config, ErrorKind, Result};
 pub struct FileLoggerBuilder {
     format: Format,
     source_location: SourceLocation,
+    overflow_strategy: OverflowStrategy,
     timezone: TimeZone,
     level: Severity,
     appender: FileAppender,
@@ -41,6 +42,7 @@ impl FileLoggerBuilder {
         FileLoggerBuilder {
             format: Format::default(),
             source_location: SourceLocation::default(),
+            overflow_strategy: OverflowStrategy::default(),
             timezone: TimeZone::default(),
             level: Severity::default(),
             appender: FileAppender::new(path),
@@ -58,6 +60,12 @@ impl FileLoggerBuilder {
     /// Sets the source code location type this logger will use.
     pub fn source_location(&mut self, source_location: SourceLocation) -> &mut Self {
         self.source_location = source_location;
+        self
+    }
+
+    /// Sets the overflow strategy for the logger.
+    pub fn overflow_strategy(&mut self, overflow_strategy: OverflowStrategy) -> &mut Self {
+        self.overflow_strategy = overflow_strategy;
         self
     }
 
@@ -140,6 +148,7 @@ impl FileLoggerBuilder {
         // async inside, level and key value filters outside for speed
         let drain = Async::new(drain.fuse())
             .chan_size(self.channel_size)
+            .overflow_strategy(self.overflow_strategy.to_async_type())
             .build()
             .fuse();
 
@@ -458,6 +467,14 @@ pub struct FileLoggerConfig {
     /// The default value is `false`.
     #[serde(default)]
     pub rotate_compress: bool,
+
+    /// Whether to drop logs on overflow.
+    ///
+    /// The possible values are `drop`, `drop_and_report`, or `block`.
+    ///
+    /// The default value is `drop_and_report`.
+    #[serde(default)]
+    pub overflow_strategy: OverflowStrategy,
 }
 
 impl Config for FileLoggerConfig {
@@ -472,6 +489,7 @@ impl Config for FileLoggerConfig {
         builder.format(self.format);
         builder.source_location(self.source_location);
         builder.timezone(self.timezone);
+        builder.overflow_strategy(self.overflow_strategy);
         builder.channel_size(self.channel_size);
         builder.rotate_size(self.rotate_size);
         builder.rotate_keep(self.rotate_keep);
@@ -489,6 +507,7 @@ impl Default for FileLoggerConfig {
             level: Severity::default(),
             format: Format::default(),
             source_location: SourceLocation::default(),
+            overflow_strategy: OverflowStrategy::default(),
             timezone: TimeZone::default(),
             path: PathBuf::default(),
             timestamp_template: default_timestamp_template(),

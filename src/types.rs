@@ -1,6 +1,7 @@
 //! Commonly used types.
 use regex::Regex;
 use slog::{Drain, Level, LevelFilter};
+use slog_async;
 use slog_kvfilter::KVFilterList;
 use std::str::FromStr;
 
@@ -217,6 +218,52 @@ impl FromStr for SourceLocation {
                 "Undefined source code location: {:?}",
                 s
             ),
+        }
+    }
+}
+
+/// Overflow Strategy.
+///
+/// # Examples
+///
+/// The default value: DropAndReport
+///
+/// ```
+/// use sloggers::types::OverflowStrategy;
+///
+/// assert_eq!(OverflowStrategy::default(), OverflowStrategy::DropAndReport);
+/// ```
+#[allow(missing_docs)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OverflowStrategy {
+    DropAndReport,
+    Drop,
+    Block,
+}
+impl Default for OverflowStrategy {
+    fn default() -> Self {
+        OverflowStrategy::DropAndReport
+    }
+}
+impl FromStr for OverflowStrategy {
+    type Err = Error;
+    fn from_str(s: &str) -> Result<Self, Error> {
+        match s {
+            "drop" => Ok(OverflowStrategy::Drop),
+            "drop_and_report" => Ok(OverflowStrategy::DropAndReport),
+            "block" => Ok(OverflowStrategy::Block),
+            _ => track_panic!(ErrorKind::Invalid, "Invalid overflow strategy: {:?}", s),
+        }
+    }
+}
+impl OverflowStrategy {
+    /// Convert the sloggers' OverflowStrategy to slog_async's OverflowStrategy
+    pub fn to_async_type(self) -> slog_async::OverflowStrategy {
+        match self {
+            OverflowStrategy::Drop => slog_async::OverflowStrategy::Drop,
+            OverflowStrategy::DropAndReport => slog_async::OverflowStrategy::DropAndReport,
+            OverflowStrategy::Block => slog_async::OverflowStrategy::Block,
         }
     }
 }

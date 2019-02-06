@@ -30,4 +30,4 @@ regex="1"
 [dev-dependencies]
 clap = "2"
 serdeconv = "0.3"
-tempdir = "0.3"
+tempfile = "3"

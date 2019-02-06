@@ -562,14 +562,14 @@ mod tests {
     use std::fs;
     use std::thread;
     use std::time::Duration;
-    use tempdir::TempDir;
+    use tempfile::{Builder as TempDirBuilder, TempDir};
 
     use super::*;
     use {Build, ErrorKind};
 
     #[test]
     fn test_reopen_if_needed() {
-        let dir = TempDir::new("sloggers_test").unwrap();
+        let dir = tempdir();
         let log_path = &dir.path().join("foo.log");
         let logger = FileLoggerBuilder::new(log_path).build().unwrap();
 
@@ -593,7 +593,7 @@ mod tests {
 
     #[test]
     fn file_rotation_works() {
-        let dir = TempDir::new("sloggers_test").unwrap();
+        let dir = tempdir();
         let logger = FileLoggerBuilder::new(dir.path().join("foo.log"))
             .rotate_size(128)
             .rotate_keep(2)
@@ -628,7 +628,7 @@ mod tests {
 
     #[test]
     fn file_gzip_rotation_works() {
-        let dir = TempDir::new("sloggers_test").unwrap();
+        let dir = tempdir();
         let logger = FileLoggerBuilder::new(dir.path().join("foo.log"))
             .rotate_size(128)
             .rotate_keep(2)
@@ -664,7 +664,7 @@ mod tests {
 
     #[test]
     fn test_path_template_to_path() {
-        let dir = TempDir::new("sloggers_test").unwrap();
+        let dir = tempdir();
         let path_template = dir
             .path()
             .join("foo_{timestamp}.log")
@@ -680,5 +680,12 @@ mod tests {
         );
         let expected = dir.path().join("foo_20180918_1019.log");
         assert_eq!(expected, actual);
+    }
+
+    fn tempdir() -> TempDir {
+        TempDirBuilder::new()
+            .prefix("sloggers_test")
+            .tempdir()
+            .expect("Cannot create a temporary directory")
     }
 }

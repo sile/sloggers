@@ -59,7 +59,7 @@ extern crate slog_scope;
 extern crate slog_stdlog;
 extern crate slog_term;
 #[cfg(test)]
-extern crate tempdir;
+extern crate tempfile;
 #[macro_use]
 extern crate trackable;
 extern crate regex;

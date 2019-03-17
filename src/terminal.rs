@@ -9,7 +9,7 @@ use std::io;
 use misc::{module_and_line, timezone_to_timestamp_fn};
 use types::KVFilterParameters;
 use types::{Format, OverflowStrategy, Severity, SourceLocation, TimeZone};
-use {Build, Config, Result};
+use {Build, BuildWithCustomFormat, Config, Result};
 
 /// A logger builder which build loggers that output log records to the terminal.
 ///
@@ -151,6 +151,20 @@ impl Build for TerminalLoggerBuilder {
         Ok(logger)
     }
 }
+impl BuildWithCustomFormat for TerminalLoggerBuilder {
+    type Decorator = Decorator;
+
+    fn build_with_custom_format<F, D>(&self, f: F) -> Result<Logger>
+    where
+        F: FnOnce(Self::Decorator) -> Result<D>,
+        D: Drain + Send + 'static,
+        D::Err: Debug,
+    {
+        let decorator = self.destination.to_decorator();
+        let drain = track!(f(decorator))?;
+        Ok(self.build_with_drain(drain))
+    }
+}
 
 /// The destination to which log records will be outputted.
 ///
@@ -192,7 +206,7 @@ impl Destination {
     }
 }
 
-enum Decorator {
+pub enum Decorator {
     Term(TermDecorator),
     PlainStdout(PlainDecorator<io::Stdout>),
     PlainStderr(PlainDecorator<io::Stderr>),

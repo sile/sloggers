@@ -64,7 +64,7 @@ extern crate tempfile;
 extern crate trackable;
 extern crate regex;
 
-pub use build::{Build, LoggerBuilder};
+pub use build::{Build, BuildWithCustomFormat, LoggerBuilder};
 pub use config::{Config, LoggerConfig};
 pub use error::{Error, ErrorKind};
 pub use misc::set_stdlog_logger;

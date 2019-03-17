@@ -1,4 +1,6 @@
-use slog::Logger;
+use slog::{Drain, Logger};
+use slog_term::Decorator;
+use std::fmt::Debug;
 
 use file::FileLoggerBuilder;
 use null::NullLoggerBuilder;
@@ -9,6 +11,16 @@ use Result;
 pub trait Build {
     /// Builds a logger.
     fn build(&self) -> Result<Logger>;
+}
+
+pub trait BuildWithCustomFormat {
+    type Decorator: Decorator;
+
+    fn build_with_custom_format<F, D>(&self, f: F) -> Result<Logger>
+    where
+        F: FnOnce(Self::Decorator) -> Result<D>,
+        D: Drain + Send + 'static,
+        D::Err: Debug;
 }
 
 /// Logger builder.

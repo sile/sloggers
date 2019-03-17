@@ -16,7 +16,7 @@ use std::time::{Duration, Instant};
 use misc::{module_and_line, timezone_to_timestamp_fn};
 use types::KVFilterParameters;
 use types::{Format, OverflowStrategy, Severity, SourceLocation, TimeZone};
-use {Build, Config, ErrorKind, Result};
+use {Build, BuildWithCustomFormat, Config, ErrorKind, Result};
 
 /// A logger builder which build loggers that write log records to the specified file.
 ///
@@ -197,9 +197,23 @@ impl Build for FileLoggerBuilder {
         Ok(logger)
     }
 }
+impl BuildWithCustomFormat for FileLoggerBuilder {
+    type Decorator = PlainDecorator<FileAppender>;
+
+    fn build_with_custom_format<F, D>(&self, f: F) -> Result<Logger>
+    where
+        F: FnOnce(Self::Decorator) -> Result<D>,
+        D: Drain + Send + 'static,
+        D::Err: Debug,
+    {
+        let decorator = PlainDecorator::new(self.appender.clone());
+        let drain = track!(f(decorator))?;
+        Ok(self.build_with_drain(drain))
+    }
+}
 
 #[derive(Debug)]
-struct FileAppender {
+pub struct FileAppender {
     path: PathBuf,
     file: Option<BufWriter<File>>,
     truncate: bool,

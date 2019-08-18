@@ -205,7 +205,7 @@ impl slog_term::Decorator for Decorator {
         f: F,
     ) -> io::Result<()>
     where
-        F: FnOnce(&mut slog_term::RecordDecorator) -> io::Result<()>,
+        F: FnOnce(&mut dyn slog_term::RecordDecorator) -> io::Result<()>,
     {
         match *self {
             Decorator::Term(ref d) => d.with_record(record, logger_values, f),

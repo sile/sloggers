@@ -1,5 +1,6 @@
 //! File logger.
 use crate::misc::{module_and_line, timezone_to_timestamp_fn};
+#[cfg(feature = "slog-kvfilter")]
 use crate::types::KVFilterParameters;
 use crate::types::{Format, OverflowStrategy, Severity, SourceLocation, TimeZone};
 use crate::{Build, Config, ErrorKind, Result};
@@ -7,11 +8,13 @@ use chrono::{DateTime, Local, TimeZone as ChronoTimeZone, Utc};
 use libflate::gzip::Encoder as GzipEncoder;
 use slog::{Drain, FnValue, Logger};
 use slog_async::Async;
+#[cfg(feature = "slog-kvfilter")]
 use slog_kvfilter::KVFilter;
 use slog_term::{CompactFormat, FullFormat, PlainDecorator};
 use std::fmt::Debug;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufWriter, Write};
+use std::panic::{RefUnwindSafe, UnwindSafe};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::thread;
@@ -29,6 +32,7 @@ pub struct FileLoggerBuilder {
     level: Severity,
     appender: FileAppender,
     channel_size: usize,
+    #[cfg(feature = "slog-kvfilter")]
     kvfilterparameters: Option<KVFilterParameters>,
 }
 
@@ -46,6 +50,7 @@ impl FileLoggerBuilder {
             level: Severity::default(),
             appender: FileAppender::new(path),
             channel_size: 1024,
+            #[cfg(feature = "slog-kvfilter")]
             kvfilterparameters: None,
         }
     }
@@ -89,6 +94,7 @@ impl FileLoggerBuilder {
     /// Sets [`KVFilter`].
     ///
     /// [`KVFilter`]: https://docs.rs/slog-kvfilter/0.6/slog_kvfilter/struct.KVFilter.html
+    #[cfg(feature = "slog-kvfilter")]
     pub fn kvfilter(&mut self, parameters: KVFilterParameters) -> &mut Self {
         self.kvfilterparameters = Some(parameters);
         self
@@ -139,6 +145,7 @@ impl FileLoggerBuilder {
         self
     }
 
+    #[cfg(feature = "slog-kvfilter")]
     fn build_with_drain<D>(&self, drain: D) -> Logger
     where
         D: Drain + Send + 'static,
@@ -158,22 +165,38 @@ impl FileLoggerBuilder {
                 .always_suppress_on_regex(p.always_suppress_on_regex.clone())
                 .only_pass_on_regex(p.only_pass_on_regex.clone());
 
-            let drain = self.level.set_level_filter(kvdrain.fuse());
-
-            match self.source_location {
-                SourceLocation::None => Logger::root(drain.fuse(), o!()),
-                SourceLocation::ModuleAndLine => {
-                    Logger::root(drain.fuse(), o!("module" => FnValue(module_and_line)))
-                }
-            }
+            self.build_logger(kvdrain)
         } else {
-            let drain = self.level.set_level_filter(drain.fuse());
+            self.build_logger(drain)
+        }
+    }
 
-            match self.source_location {
-                SourceLocation::None => Logger::root(drain.fuse(), o!()),
-                SourceLocation::ModuleAndLine => {
-                    Logger::root(drain.fuse(), o!("module" => FnValue(module_and_line)))
-                }
+    #[cfg(not(feature = "slog-kvfilter"))]
+    fn build_with_drain<D>(&self, drain: D) -> Logger
+    where
+        D: Drain + Send + 'static,
+        D::Err: Debug,
+    {
+        // async inside, level and key value filters outside for speed
+        let drain = Async::new(drain.fuse())
+            .chan_size(self.channel_size)
+            .overflow_strategy(self.overflow_strategy.to_async_type())
+            .build()
+            .fuse();
+        self.build_logger(drain)
+    }
+
+    fn build_logger<D>(&self, drain: D) -> Logger
+    where
+        D: Drain + Send + Sync + UnwindSafe + RefUnwindSafe + 'static,
+        D::Err: Debug,
+    {
+        let drain = self.level.set_level_filter(drain.fuse());
+
+        match self.source_location {
+            SourceLocation::None => Logger::root(drain.fuse(), o!()),
+            SourceLocation::ModuleAndLine => {
+                Logger::root(drain.fuse(), o!("module" => FnValue(module_and_line)))
             }
         }
     }

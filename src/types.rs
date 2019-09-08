@@ -1,8 +1,10 @@
 //! Commonly used types.
 use crate::{Error, ErrorKind};
+#[cfg(feature = "slog-kvfilter")]
 use regex::Regex;
 use slog::{Drain, Level, LevelFilter};
 use slog_async;
+#[cfg(feature = "slog-kvfilter")]
 use slog_kvfilter::KVFilterList;
 use std::str::FromStr;
 
@@ -94,6 +96,7 @@ impl FromStr for Severity {
 /// ```
 #[derive(Debug, Clone)]
 #[allow(missing_docs)]
+#[cfg(feature = "slog-kvfilter")]
 pub struct KVFilterParameters {
     pub severity: Severity,
     pub only_pass_any_on_all_keys: Option<KVFilterList>,
@@ -101,6 +104,7 @@ pub struct KVFilterParameters {
     pub only_pass_on_regex: Option<Regex>,
     pub always_suppress_on_regex: Option<Regex>,
 }
+#[cfg(feature = "slog-kvfilter")]
 impl Default for KVFilterParameters {
     fn default() -> Self {
         KVFilterParameters {

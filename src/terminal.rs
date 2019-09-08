@@ -1,15 +1,14 @@
 //! Terminal logger.
+use crate::misc::{module_and_line, timezone_to_timestamp_fn};
+use crate::types::KVFilterParameters;
+use crate::types::{Format, OverflowStrategy, Severity, SourceLocation, TimeZone};
+use crate::{Build, Config, Result};
 use slog::{self, Drain, FnValue, Logger};
 use slog_async::Async;
 use slog_kvfilter::KVFilter;
 use slog_term::{self, CompactFormat, FullFormat, PlainDecorator, TermDecorator};
 use std::fmt::Debug;
 use std::io;
-
-use misc::{module_and_line, timezone_to_timestamp_fn};
-use types::KVFilterParameters;
-use types::{Format, OverflowStrategy, Severity, SourceLocation, TimeZone};
-use {Build, Config, Result};
 
 /// A logger builder which build loggers that output log records to the terminal.
 ///

@@ -1,4 +1,8 @@
 //! File logger.
+use crate::misc::{module_and_line, timezone_to_timestamp_fn};
+use crate::types::KVFilterParameters;
+use crate::types::{Format, OverflowStrategy, Severity, SourceLocation, TimeZone};
+use crate::{Build, Config, ErrorKind, Result};
 use chrono::{DateTime, Local, TimeZone as ChronoTimeZone, Utc};
 use libflate::gzip::Encoder as GzipEncoder;
 use slog::{Drain, FnValue, Logger};
@@ -12,11 +16,6 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
-
-use misc::{module_and_line, timezone_to_timestamp_fn};
-use types::KVFilterParameters;
-use types::{Format, OverflowStrategy, Severity, SourceLocation, TimeZone};
-use {Build, Config, ErrorKind, Result};
 
 /// A logger builder which build loggers that write log records to the specified file.
 ///
@@ -558,14 +557,13 @@ fn default_timestamp_template() -> String {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use crate::{Build, ErrorKind};
     use chrono::NaiveDateTime;
     use std::fs;
     use std::thread;
     use std::time::Duration;
     use tempfile::{Builder as TempDirBuilder, TempDir};
-
-    use super::*;
-    use {Build, ErrorKind};
 
     #[test]
     fn test_reopen_if_needed() {

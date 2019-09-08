@@ -1,9 +1,8 @@
+use crate::file::FileLoggerBuilder;
+use crate::null::NullLoggerBuilder;
+use crate::terminal::TerminalLoggerBuilder;
+use crate::Result;
 use slog::Logger;
-
-use file::FileLoggerBuilder;
-use null::NullLoggerBuilder;
-use terminal::TerminalLoggerBuilder;
-use Result;
 
 /// This trait allows to build a logger instance.
 pub trait Build {

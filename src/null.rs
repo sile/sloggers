@@ -1,7 +1,6 @@
 //! Null logger.
+use crate::{Build, Config, Result};
 use slog::{Discard, Logger};
-
-use {Build, Config, Result};
 
 /// Null logger builder.
 ///

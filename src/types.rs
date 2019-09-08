@@ -1,11 +1,10 @@
 //! Commonly used types.
+use crate::{Error, ErrorKind};
 use regex::Regex;
 use slog::{Drain, Level, LevelFilter};
 use slog_async;
 use slog_kvfilter::KVFilterList;
 use std::str::FromStr;
-
-use {Error, ErrorKind};
 
 /// The severity of a log record.
 ///

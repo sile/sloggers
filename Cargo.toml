@@ -8,6 +8,7 @@ repository = "https://github.com/sile/sloggers"
 readme = "README.md"
 keywords = ["logger"]
 license = "MIT"
+edition = "2018"
 
 [badges]
 travis-ci = {repository = "sile/sloggers"}

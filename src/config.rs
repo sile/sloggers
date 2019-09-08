@@ -1,10 +1,9 @@
+use crate::file::FileLoggerConfig;
+use crate::null::NullLoggerConfig;
+use crate::terminal::TerminalLoggerConfig;
+use crate::types::Severity;
+use crate::{Build, LoggerBuilder, Result};
 use slog::Logger;
-
-use file::FileLoggerConfig;
-use null::NullLoggerConfig;
-use terminal::TerminalLoggerConfig;
-use types::Severity;
-use {Build, LoggerBuilder, Result};
 
 /// Configuration of a logger builder.
 pub trait Config {

@@ -33,12 +33,10 @@ pub trait Config {
 ///
 /// use sloggers::LoggerConfig;
 ///
-/// # fn main() {
 /// let toml = r#"
 /// type = "null"
 /// "#;
 /// let _config: LoggerConfig = serdeconv::from_toml_str(toml).unwrap();
-/// # }
 /// ```
 ///
 /// Terminal logger.
@@ -49,13 +47,11 @@ pub trait Config {
 ///
 /// use sloggers::LoggerConfig;
 ///
-/// # fn main() {
 /// let toml = r#"
 /// type = "terminal"
 /// level = "warning"
 /// "#;
 /// let _config: LoggerConfig = serdeconv::from_toml_str(toml).unwrap();
-/// # }
 /// ```
 ///
 /// File logger.
@@ -66,14 +62,12 @@ pub trait Config {
 ///
 /// use sloggers::LoggerConfig;
 ///
-/// # fn main() {
 /// let toml = r#"
 /// type = "file"
 /// path = "/path/to/file.log"
 /// timezone = "utc"
 /// "#;
 /// let _config: LoggerConfig = serdeconv::from_toml_str(toml).unwrap();
-/// # }
 /// ```
 #[allow(missing_docs)]
 #[derive(Debug, Clone, Serialize, Deserialize)]

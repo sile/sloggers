@@ -6,10 +6,7 @@
 //! Creates a logger via `TerminalLoggerBuilder`:
 //!
 //! ```
-//! #[macro_use]
-//! extern crate slog;
-//! extern crate sloggers;
-//!
+//! use slog::info;
 //! use sloggers::Build;
 //! use sloggers::terminal::{TerminalLoggerBuilder, Destination};
 //! use sloggers::types::Severity;
@@ -25,11 +22,7 @@
 //! Creates a logger from configuration text (TOML):
 //!
 //! ```
-//! #[macro_use]
-//! extern crate slog;
-//! extern crate sloggers;
-//! extern crate serdeconv;
-//!
+//! use slog::info;
 //! use sloggers::{Config, LoggerConfig};
 //!
 //! let config: LoggerConfig = serdeconv::from_toml_str(r#"

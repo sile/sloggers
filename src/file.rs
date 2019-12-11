@@ -5,6 +5,7 @@ use crate::types::KVFilterParameters;
 use crate::types::{Format, OverflowStrategy, Severity, SourceLocation, TimeZone};
 use crate::{Build, Config, ErrorKind, Result};
 use chrono::{DateTime, Local, TimeZone as ChronoTimeZone, Utc};
+#[cfg(feature = "libflate")]
 use libflate::gzip::Encoder as GzipEncoder;
 use slog::{Drain, FnValue, Logger};
 use slog_async::Async;
@@ -16,7 +17,9 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufWriter, Write};
 use std::panic::{RefUnwindSafe, UnwindSafe};
 use std::path::{Path, PathBuf};
+#[cfg(feature = "libflate")]
 use std::sync::mpsc;
+#[cfg(feature = "libflate")]
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -140,6 +143,7 @@ impl FileLoggerBuilder {
     /// the suffix ".gz" will be appended to those file names.
     ///
     /// The default value is `false`.
+    #[cfg(feature = "libflate")]
     pub fn rotate_compress(&mut self, compress: bool) -> &mut Self {
         self.appender.rotate_compress = compress;
         self
@@ -228,7 +232,9 @@ struct FileAppender {
     written_size: u64,
     rotate_size: u64,
     rotate_keep: usize,
+    #[cfg(feature = "libflate")]
     rotate_compress: bool,
+    #[cfg(feature = "libflate")]
     wait_compression: Option<mpsc::Receiver<io::Result<()>>>,
     next_reopen_check: Instant,
     reopen_check_interval: Duration,
@@ -243,7 +249,9 @@ impl Clone for FileAppender {
             written_size: 0,
             rotate_size: self.rotate_size,
             rotate_keep: self.rotate_keep,
+            #[cfg(feature = "libflate")]
             rotate_compress: self.rotate_compress,
+            #[cfg(feature = "libflate")]
             wait_compression: None,
             next_reopen_check: Instant::now(),
             reopen_check_interval: self.reopen_check_interval,
@@ -260,7 +268,9 @@ impl FileAppender {
             written_size: 0,
             rotate_size: default_rotate_size(),
             rotate_keep: default_rotate_keep(),
+            #[cfg(feature = "libflate")]
             rotate_compress: false,
+            #[cfg(feature = "libflate")]
             wait_compression: None,
             next_reopen_check: Instant::now(),
             reopen_check_interval: Duration::from_millis(1000),
@@ -302,24 +312,29 @@ impl FileAppender {
     }
 
     fn rotate(&mut self) -> io::Result<()> {
-        if let Some(ref mut rx) = self.wait_compression {
-            use std::sync::mpsc::TryRecvError;
-            match rx.try_recv() {
-                Err(TryRecvError::Empty) => {
-                    // The previous compression is in progress
-                    return Ok(());
-                }
-                Err(TryRecvError::Disconnected) => {
-                    let e =
-                        io::Error::new(io::ErrorKind::Other, "Log file compression thread aborted");
-                    return Err(e);
-                }
-                Ok(result) => {
-                    result?;
+        #[cfg(feature = "libflate")]
+        {
+            if let Some(ref mut rx) = self.wait_compression {
+                use std::sync::mpsc::TryRecvError;
+                match rx.try_recv() {
+                    Err(TryRecvError::Empty) => {
+                        // The previous compression is in progress
+                        return Ok(());
+                    }
+                    Err(TryRecvError::Disconnected) => {
+                        let e = io::Error::new(
+                            io::ErrorKind::Other,
+                            "Log file compression thread aborted",
+                        );
+                        return Err(e);
+                    }
+                    Ok(result) => {
+                        result?;
+                    }
                 }
             }
+            self.wait_compression = None;
         }
-        self.wait_compression = None;
 
         let _ = self.file.take();
 
@@ -332,20 +347,25 @@ impl FileAppender {
         }
         if self.path.exists() {
             let rotated_path = self.rotated_path(1)?;
-            if self.rotate_compress {
-                let (plain_path, temp_gz_path) = self.rotated_paths_for_compression()?;
-                let (tx, rx) = mpsc::channel();
+            #[cfg(feature = "libflate")]
+            {
+                if self.rotate_compress {
+                    let (plain_path, temp_gz_path) = self.rotated_paths_for_compression()?;
+                    let (tx, rx) = mpsc::channel();
 
-                fs::rename(&self.path, &plain_path)?;
-                thread::spawn(move || {
-                    let result = Self::compress(plain_path, temp_gz_path, rotated_path);
-                    let _ = tx.send(result);
-                });
+                    fs::rename(&self.path, &plain_path)?;
+                    thread::spawn(move || {
+                        let result = Self::compress(plain_path, temp_gz_path, rotated_path);
+                        let _ = tx.send(result);
+                    });
 
-                self.wait_compression = Some(rx);
-            } else {
-                fs::rename(&self.path, rotated_path)?;
+                    self.wait_compression = Some(rx);
+                } else {
+                    fs::rename(&self.path, rotated_path)?;
+                }
             }
+            #[cfg(not(feature = "libflate"))]
+            fs::rename(&self.path, rotated_path)?;
         }
 
         let delete_path = self.rotated_path(self.rotate_keep + 1)?;
@@ -366,12 +386,18 @@ impl FileAppender {
                 format!("Non UTF-8 log file path: {:?}", self.path),
             )
         })?;
-        if self.rotate_compress {
-            Ok(PathBuf::from(format!("{}.{}.gz", path, i)))
-        } else {
-            Ok(PathBuf::from(format!("{}.{}", path, i)))
+        #[cfg(feature = "libflate")]
+        {
+            if self.rotate_compress {
+                Ok(PathBuf::from(format!("{}.{}.gz", path, i)))
+            } else {
+                Ok(PathBuf::from(format!("{}.{}", path, i)))
+            }
         }
+        #[cfg(not(feature = "libflate"))]
+        Ok(PathBuf::from(format!("{}.{}", path, i)))
     }
+    #[cfg(feature = "libflate")]
     fn rotated_paths_for_compression(&self) -> io::Result<(PathBuf, PathBuf)> {
         let path = self.path.to_str().ok_or_else(|| {
             io::Error::new(
@@ -384,6 +410,7 @@ impl FileAppender {
             PathBuf::from(format!("{}.1.gz.temp", path)),
         ))
     }
+    #[cfg(feature = "libflate")]
     fn compress(input_path: PathBuf, temp_path: PathBuf, output_path: PathBuf) -> io::Result<()> {
         let mut input = File::open(&input_path)?;
         let mut temp = GzipEncoder::new(File::create(&temp_path)?)?;
@@ -488,6 +515,7 @@ pub struct FileLoggerConfig {
     ///
     /// The default value is `false`.
     #[serde(default)]
+    #[cfg(feature = "libflate")]
     pub rotate_compress: bool,
 
     /// Whether to drop logs on overflow.
@@ -515,6 +543,7 @@ impl Config for FileLoggerConfig {
         builder.channel_size(self.channel_size);
         builder.rotate_size(self.rotate_size);
         builder.rotate_keep(self.rotate_keep);
+        #[cfg(feature = "libflate")]
         builder.rotate_compress(self.rotate_compress);
         if self.truncate {
             builder.truncate();
@@ -537,6 +566,7 @@ impl Default for FileLoggerConfig {
             truncate: false,
             rotate_size: default_rotate_size(),
             rotate_keep: default_rotate_keep(),
+            #[cfg(feature = "libflate")]
             rotate_compress: false,
         }
     }

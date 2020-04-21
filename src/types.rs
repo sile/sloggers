@@ -205,6 +205,7 @@ pub enum SourceLocation {
     None,
     ModuleAndLine,
     FileAndLine,
+    LocalFileAndLine,
 }
 impl Default for SourceLocation {
     fn default() -> Self {
@@ -218,6 +219,7 @@ impl FromStr for SourceLocation {
             "none" => Ok(SourceLocation::None),
             "module_and_line" => Ok(SourceLocation::ModuleAndLine),
             "file_and_line" => Ok(SourceLocation::FileAndLine),
+            "local_file_and_line" => Ok(SourceLocation::LocalFileAndLine),
             _ => track_panic!(
                 ErrorKind::Invalid,
                 "Undefined source code location: {:?}",

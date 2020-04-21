@@ -150,6 +150,9 @@ impl TerminalLoggerBuilder {
             SourceLocation::FileAndLine => {
                 Logger::root(drain.fuse(), o!("module" => FnValue(misc::file_and_line)))
             }
+            SourceLocation::LocalFileAndLine => {
+                Logger::root(drain.fuse(), o!("module" => FnValue(misc::local_file_and_line)))
+            }
         }
     }
 }

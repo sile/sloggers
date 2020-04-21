@@ -204,6 +204,7 @@ impl FromStr for TimeZone {
 pub enum SourceLocation {
     None,
     ModuleAndLine,
+    FileAndLine,
 }
 impl Default for SourceLocation {
     fn default() -> Self {
@@ -216,6 +217,7 @@ impl FromStr for SourceLocation {
         match s {
             "none" => Ok(SourceLocation::None),
             "module_and_line" => Ok(SourceLocation::ModuleAndLine),
+            "file_and_line" => Ok(SourceLocation::FileAndLine),
             _ => track_panic!(
                 ErrorKind::Invalid,
                 "Undefined source code location: {:?}",

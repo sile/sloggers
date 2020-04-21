@@ -17,6 +17,10 @@ pub fn module_and_line(record: &Record) -> String {
     format!("{}:{}", record.module(), record.line())
 }
 
+pub fn file_and_line(record: &Record) -> String {
+    format!("{}:{}", record.file(), record.line())
+}
+
 pub fn timezone_to_timestamp_fn(timezone: TimeZone) -> fn(&mut dyn io::Write) -> io::Result<()> {
     match timezone {
         TimeZone::Utc => slog_term::timestamp_utc,

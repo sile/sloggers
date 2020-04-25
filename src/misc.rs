@@ -1,9 +1,6 @@
 use crate::types::TimeZone;
 use crate::{ErrorKind, Result};
 use slog::{Logger, Record};
-use slog_scope;
-use slog_stdlog;
-use slog_term;
 use std::io;
 use std::path::Path;
 use trackable::error::ErrorKindExt;

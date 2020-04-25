@@ -3,7 +3,6 @@ use crate::{Error, ErrorKind};
 #[cfg(feature = "slog-kvfilter")]
 use regex::Regex;
 use slog::{Drain, Level, LevelFilter};
-use slog_async;
 #[cfg(feature = "slog-kvfilter")]
 use slog_kvfilter::KVFilterList;
 use std::str::FromStr;

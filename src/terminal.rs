@@ -1,5 +1,5 @@
 //! Terminal logger.
-use crate::misc::{module_and_line, timezone_to_timestamp_fn};
+use crate::misc;
 #[cfg(feature = "slog-kvfilter")]
 use crate::types::KVFilterParameters;
 use crate::types::{Format, OverflowStrategy, Severity, SourceLocation, TimeZone};
@@ -145,7 +145,13 @@ impl TerminalLoggerBuilder {
         match self.source_location {
             SourceLocation::None => Logger::root(drain.fuse(), o!()),
             SourceLocation::ModuleAndLine => {
-                Logger::root(drain.fuse(), o!("module" => FnValue(module_and_line)))
+                Logger::root(drain.fuse(), o!("module" => FnValue(misc::module_and_line)))
+            }
+            SourceLocation::FileAndLine => {
+                Logger::root(drain.fuse(), o!("module" => FnValue(misc::file_and_line)))
+            }
+            SourceLocation::LocalFileAndLine => {
+                Logger::root(drain.fuse(), o!("module" => FnValue(misc::local_file_and_line)))
             }
         }
     }
@@ -158,7 +164,7 @@ impl Default for TerminalLoggerBuilder {
 impl Build for TerminalLoggerBuilder {
     fn build(&self) -> Result<Logger> {
         let decorator = self.destination.to_decorator();
-        let timestamp = timezone_to_timestamp_fn(self.timezone);
+        let timestamp = misc::timezone_to_timestamp_fn(self.timezone);
         let logger = match self.format {
             Format::Full => {
                 let format = FullFormat::new(decorator).use_custom_timestamp(timestamp);

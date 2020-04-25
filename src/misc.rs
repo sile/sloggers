@@ -28,7 +28,6 @@ pub fn local_file_and_line(record: &Record) -> String {
     } else {
         module_and_line(record)
     }
-
 }
 
 pub fn timezone_to_timestamp_fn(timezone: TimeZone) -> fn(&mut dyn io::Write) -> io::Result<()> {

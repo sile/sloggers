@@ -4,6 +4,7 @@ use crate::misc;
 use crate::types::KVFilterParameters;
 use crate::types::{Format, OverflowStrategy, Severity, SourceLocation, TimeZone};
 use crate::{Build, Config, Result};
+use serde::{Deserialize, Serialize};
 use slog::{self, Drain, FnValue, Logger};
 use slog_async::Async;
 #[cfg(feature = "slog-kvfilter")]

@@ -19,19 +19,18 @@ default = ["libflate", "slog-kvfilter"]
 
 [dependencies]
 chrono="0.4"
-libflate = {version = "0.1", optional = true}
-serde = "1"
-serde_derive = "1"
+libflate = {version = "1", optional = true}
+serde = {version = "1", features = ["derive"]}
 slog = "2"
 slog-async = "2"
 slog-term = "2"
 slog-scope = "4"
 slog-kvfilter = {version = "~0.7", optional = true}
-slog-stdlog = "3"
-trackable = "0.2.19"
+slog-stdlog = "4"
+trackable = "1"
 regex="1"
 
 [dev-dependencies]
 clap = "2"
-serdeconv = "0.3"
+serdeconv = "0.4"
 tempfile = "3"

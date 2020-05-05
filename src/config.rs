@@ -3,6 +3,7 @@ use crate::null::NullLoggerConfig;
 use crate::terminal::TerminalLoggerConfig;
 use crate::types::Severity;
 use crate::{Build, LoggerBuilder, Result};
+use serde::{Deserialize, Serialize};
 use slog::Logger;
 
 /// Configuration of a logger builder.

@@ -7,6 +7,7 @@ use crate::{Build, Config, ErrorKind, Result};
 use chrono::{DateTime, Local, TimeZone as ChronoTimeZone, Utc};
 #[cfg(feature = "libflate")]
 use libflate::gzip::Encoder as GzipEncoder;
+use serde::{Deserialize, Serialize};
 use slog::{Drain, FnValue, Logger};
 use slog_async::Async;
 #[cfg(feature = "slog-kvfilter")]

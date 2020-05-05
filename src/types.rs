@@ -2,6 +2,7 @@
 use crate::{Error, ErrorKind};
 #[cfg(feature = "slog-kvfilter")]
 use regex::Regex;
+use serde::{Deserialize, Serialize};
 use slog::{Drain, Level, LevelFilter};
 #[cfg(feature = "slog-kvfilter")]
 use slog_kvfilter::KVFilterList;

@@ -1,5 +1,6 @@
 //! Null logger.
 use crate::{Build, Config, Result};
+use serde::{Deserialize, Serialize};
 use slog::{Discard, Logger};
 
 /// Null logger builder.

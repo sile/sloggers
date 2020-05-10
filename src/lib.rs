@@ -1,6 +1,14 @@
 //! This crate provides frequently used
 //! [slog](https://github.com/slog-rs/slog) loggers and convenient functions.
 //!
+//! **Important note:** this crate is optimized for performance rather than for
+//! not losing any messages! This may be surprising in some common scenarios,
+//! like logging an error message and calling `std::process::exit(1)`. It's
+//! recommended to drop the logger(s) before exiting. `panic = "abort"` may have
+//! the same surprising effect, so unwinding is preferrable if you want to avoid
+//! losing the messages. See [#29](https://github.com/sile/sloggers/issues/29) for
+//! more information.
+//!
 //! # Examples
 //!
 //! Creates a logger via `TerminalLoggerBuilder`:

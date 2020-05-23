@@ -246,6 +246,7 @@ impl slog_term::Decorator for Decorator {
 
 /// The configuration of `TerminalLoggerBuilder`.
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct TerminalLoggerConfig {
     /// Log level.
     #[serde(default)]
@@ -278,6 +279,12 @@ pub struct TerminalLoggerConfig {
     /// The default value is `drop_and_report`.
     #[serde(default)]
     pub overflow_strategy: OverflowStrategy,
+}
+impl TerminalLoggerConfig {
+    /// Creates a new `TerminalLoggerConfig` with default settings.
+    pub fn new() -> Self {
+        Default::default()
+    }
 }
 impl Config for TerminalLoggerConfig {
     type Builder = TerminalLoggerBuilder;

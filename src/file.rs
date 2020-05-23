@@ -459,6 +459,7 @@ impl Write for FileAppender {
 
 /// The configuration of `FileLoggerBuilder`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct FileLoggerConfig {
     /// Log level.
     #[serde(default)]
@@ -533,6 +534,13 @@ pub struct FileLoggerConfig {
     /// The default value is `drop_and_report`.
     #[serde(default)]
     pub overflow_strategy: OverflowStrategy,
+}
+
+impl FileLoggerConfig {
+    /// Creates a new `FileLoggerConfig` with default settings.
+    pub fn new() -> Self {
+        Default::default()
+    }
 }
 
 impl Config for FileLoggerConfig {

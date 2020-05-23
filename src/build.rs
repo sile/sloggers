@@ -13,6 +13,7 @@ pub trait Build {
 /// Logger builder.
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
+#[non_exhaustive]
 pub enum LoggerBuilder {
     /// File logger.
     File(FileLoggerBuilder),

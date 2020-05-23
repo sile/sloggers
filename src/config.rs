@@ -74,6 +74,7 @@ pub trait Config {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "lowercase")]
+#[non_exhaustive]
 pub enum LoggerConfig {
     File(FileLoggerConfig),
     Null(NullLoggerConfig),

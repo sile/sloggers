@@ -94,9 +94,32 @@ impl FromStr for Severity {
 /// assert!(params.only_pass_on_regex.is_none());
 /// assert!(params.always_suppress_on_regex.is_none());
 /// ```
+/// 
+/// # Non-Exhaustive
+/// 
+/// This structure is marked [non-exhaustive]. It cannot be constructed using a `struct` expression:
+/// 
+/// ```compile_fail
+/// # use sloggers::types::{KVFilterParameters, Severity};
+/// let p = KVFilterParameters {
+///     severity: Severity::Warning,
+///     .. Default::default()
+/// };
+/// ```
+/// 
+/// Instead, use the `new` method to construct it, then fill the fields in:
+/// 
+/// ```
+/// # use sloggers::types::{KVFilterParameters, Severity};
+/// let mut p = KVFilterParameters::new();
+/// p.severity = Severity::Warning;
+/// ```
+/// 
+/// [non-exhaustive]: https://doc.rust-lang.org/stable/reference/attributes/type_system.html#the-non_exhaustive-attribute
 #[derive(Debug, Clone)]
 #[allow(missing_docs)]
 #[cfg(feature = "slog-kvfilter")]
+#[non_exhaustive]
 pub struct KVFilterParameters {
     pub severity: Severity,
     pub only_pass_any_on_all_keys: Option<KVFilterList>,
@@ -116,6 +139,14 @@ impl Default for KVFilterParameters {
         }
     }
 }
+#[cfg(feature = "slog-kvfilter")]
+impl KVFilterParameters {
+    /// Creates a new `KVFilterParameters` structure with default settings.
+    #[inline]
+    pub fn new() -> Self {
+        Default::default()
+    }
+}
 
 /// The format of log records.
 ///
@@ -130,6 +161,7 @@ impl Default for KVFilterParameters {
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[non_exhaustive]
 pub enum Format {
     /// Full format.
     Full,
@@ -201,6 +233,7 @@ impl FromStr for TimeZone {
 #[allow(missing_docs)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum SourceLocation {
     None,
     ModuleAndLine,
@@ -243,6 +276,7 @@ impl FromStr for SourceLocation {
 #[allow(missing_docs)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum OverflowStrategy {
     DropAndReport,
     Drop,

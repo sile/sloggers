@@ -1,47 +1,34 @@
 //! Terminal logger.
+use crate::build::BuilderCommon;
 use crate::misc;
 #[cfg(feature = "slog-kvfilter")]
 use crate::types::KVFilterParameters;
 use crate::types::{Format, OverflowStrategy, Severity, SourceLocation, TimeZone};
 use crate::{Build, Config, Result};
 use serde::{Deserialize, Serialize};
-use slog::{self, Drain, FnValue, Logger};
-use slog_async::Async;
-#[cfg(feature = "slog-kvfilter")]
-use slog_kvfilter::KVFilter;
+use slog::Logger;
 use slog_term::{self, CompactFormat, FullFormat, PlainDecorator, TermDecorator};
 use std::fmt::Debug;
 use std::io;
-use std::panic::{RefUnwindSafe, UnwindSafe};
 
 /// A logger builder which build loggers that output log records to the terminal.
 ///
 /// The resulting logger will work asynchronously (the default channel size is 1024).
 #[derive(Debug)]
 pub struct TerminalLoggerBuilder {
+    common: BuilderCommon,
     format: Format,
-    source_location: SourceLocation,
     timezone: TimeZone,
     destination: Destination,
-    overflow_strategy: OverflowStrategy,
-    level: Severity,
-    channel_size: usize,
-    #[cfg(feature = "slog-kvfilter")]
-    kvfilterparameters: Option<KVFilterParameters>,
 }
 impl TerminalLoggerBuilder {
     /// Makes a new `TerminalLoggerBuilder` instance.
     pub fn new() -> Self {
         TerminalLoggerBuilder {
+            common: BuilderCommon::default(),
             format: Format::default(),
-            source_location: SourceLocation::default(),
-            overflow_strategy: OverflowStrategy::default(),
             timezone: TimeZone::default(),
             destination: Destination::default(),
-            level: Severity::default(),
-            channel_size: 1024,
-            #[cfg(feature = "slog-kvfilter")]
-            kvfilterparameters: None,
         }
     }
 
@@ -53,13 +40,13 @@ impl TerminalLoggerBuilder {
 
     /// Sets the source code location type this logger will use.
     pub fn source_location(&mut self, source_location: SourceLocation) -> &mut Self {
-        self.source_location = source_location;
+        self.common.source_location = source_location;
         self
     }
 
     /// Sets the overflow strategy for the logger.
     pub fn overflow_strategy(&mut self, overflow_strategy: OverflowStrategy) -> &mut Self {
-        self.overflow_strategy = overflow_strategy;
+        self.common.overflow_strategy = overflow_strategy;
         self
     }
 
@@ -77,13 +64,13 @@ impl TerminalLoggerBuilder {
 
     /// Sets the log level of this logger.
     pub fn level(&mut self, severity: Severity) -> &mut Self {
-        self.level = severity;
+        self.common.level = severity;
         self
     }
 
     /// Sets the size of the asynchronous channel of this logger.
     pub fn channel_size(&mut self, channel_size: usize) -> &mut Self {
-        self.channel_size = channel_size;
+        self.common.channel_size = channel_size;
         self
     }
 
@@ -92,70 +79,8 @@ impl TerminalLoggerBuilder {
     /// [`KVFilter`]: https://docs.rs/slog-kvfilter/0.6/slog_kvfilter/struct.KVFilter.html
     #[cfg(feature = "slog-kvfilter")]
     pub fn kvfilter(&mut self, parameters: KVFilterParameters) -> &mut Self {
-        self.kvfilterparameters = Some(parameters);
+        self.common.kvfilterparameters = Some(parameters);
         self
-    }
-
-    #[cfg(feature = "slog-kvfilter")]
-    fn build_with_drain<D>(&self, drain: D) -> Logger
-    where
-        D: Drain + Send + 'static,
-        D::Err: Debug,
-    {
-        // async inside, level and key value filters outside for speed
-        let drain = Async::new(drain.fuse())
-            .chan_size(self.channel_size)
-            .overflow_strategy(self.overflow_strategy.to_async_type())
-            .build()
-            .fuse();
-
-        if let Some(ref p) = self.kvfilterparameters {
-            let kvdrain = KVFilter::new(drain, p.severity.as_level())
-                .always_suppress_any(p.always_suppress_any.clone())
-                .only_pass_any_on_all_keys(p.only_pass_any_on_all_keys.clone())
-                .always_suppress_on_regex(p.always_suppress_on_regex.clone())
-                .only_pass_on_regex(p.only_pass_on_regex.clone());
-            self.build_logger(kvdrain)
-        } else {
-            self.build_logger(drain)
-        }
-    }
-
-    #[cfg(not(feature = "slog-kvfilter"))]
-    fn build_with_drain<D>(&self, drain: D) -> Logger
-    where
-        D: Drain + Send + 'static,
-        D::Err: Debug,
-    {
-        // async inside, level and key value filters outside for speed
-        let drain = Async::new(drain.fuse())
-            .chan_size(self.channel_size)
-            .overflow_strategy(self.overflow_strategy.to_async_type())
-            .build()
-            .fuse();
-        self.build_logger(drain)
-    }
-
-    fn build_logger<D>(&self, drain: D) -> Logger
-    where
-        D: Drain + Send + Sync + UnwindSafe + RefUnwindSafe + 'static,
-        D::Err: Debug,
-    {
-        let drain = self.level.set_level_filter(drain.fuse());
-
-        match self.source_location {
-            SourceLocation::None => Logger::root(drain.fuse(), o!()),
-            SourceLocation::ModuleAndLine => {
-                Logger::root(drain.fuse(), o!("module" => FnValue(misc::module_and_line)))
-            }
-            SourceLocation::FileAndLine => {
-                Logger::root(drain.fuse(), o!("module" => FnValue(misc::file_and_line)))
-            }
-            SourceLocation::LocalFileAndLine => Logger::root(
-                drain.fuse(),
-                o!("module" => FnValue(misc::local_file_and_line)),
-            ),
-        }
     }
 }
 impl Default for TerminalLoggerBuilder {
@@ -170,11 +95,11 @@ impl Build for TerminalLoggerBuilder {
         let logger = match self.format {
             Format::Full => {
                 let format = FullFormat::new(decorator).use_custom_timestamp(timestamp);
-                self.build_with_drain(format.build())
+                self.common.build_with_drain(format.build())
             }
             Format::Compact => {
                 let format = CompactFormat::new(decorator).use_custom_timestamp(timestamp);
-                self.build_with_drain(format.build())
+                self.common.build_with_drain(format.build())
             }
         };
         Ok(logger)

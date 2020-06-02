@@ -1,6 +1,8 @@
 use crate::file::FileLoggerBuilder;
 use crate::misc;
 use crate::null::NullLoggerBuilder;
+#[cfg(unix)]
+use crate::syslog::SyslogBuilder;
 use crate::terminal::TerminalLoggerBuilder;
 #[cfg(feature = "slog-kvfilter")]
 use crate::types::KVFilterParameters;
@@ -30,6 +32,10 @@ pub enum LoggerBuilder {
     /// Null logger.
     Null(NullLoggerBuilder),
 
+    /// Syslog logger.
+    #[cfg(unix)]
+    Syslog(SyslogBuilder),
+
     /// Terminal logger.
     Terminal(TerminalLoggerBuilder),
 }
@@ -38,6 +44,8 @@ impl Build for LoggerBuilder {
         match *self {
             LoggerBuilder::File(ref b) => track!(b.build()),
             LoggerBuilder::Null(ref b) => track!(b.build()),
+            #[cfg(unix)]
+            LoggerBuilder::Syslog(ref b) => track!(b.build()),
             LoggerBuilder::Terminal(ref b) => track!(b.build()),
         }
     }

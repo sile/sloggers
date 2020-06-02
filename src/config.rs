@@ -1,5 +1,9 @@
+#[cfg(not(unix))]
+use crate::fake_syslog::SyslogNotSupported;
 use crate::file::FileLoggerConfig;
 use crate::null::NullLoggerConfig;
+#[cfg(unix)]
+use crate::syslog::SyslogConfig;
 use crate::terminal::TerminalLoggerConfig;
 use crate::types::Severity;
 use crate::{Build, LoggerBuilder, Result};
@@ -70,6 +74,31 @@ pub trait Config {
 /// "#;
 /// let _config: LoggerConfig = serdeconv::from_toml_str(toml).unwrap();
 /// ```
+/// 
+/// Syslog logger. (Unix-like systems only.)
+/// 
+/// ```
+/// extern crate sloggers;
+/// extern crate serdeconv;
+/// 
+/// use sloggers::LoggerConfig;
+///
+/// let toml = r#"
+/// type = "syslog"
+/// facility = "daemon"
+/// "#;
+/// # #[cfg(unix)]
+/// let _config: LoggerConfig = serdeconv::from_toml_str(toml).unwrap();
+/// # #[cfg(not(unix))] {
+/// #     use std::error::Error as StdError;
+/// #     assert!(
+/// #         serdeconv::from_toml_str::<LoggerConfig>(toml)
+/// #         .expect_err("deserializing the configuration should have failed")
+/// #         .to_string()
+/// #         .contains("syslog is not supported")
+/// #     );
+/// # }
+/// ```
 #[allow(missing_docs)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
@@ -78,6 +107,11 @@ pub trait Config {
 pub enum LoggerConfig {
     File(FileLoggerConfig),
     Null(NullLoggerConfig),
+    #[cfg(unix)]
+    Syslog(SyslogConfig),
+    #[cfg(not(unix))]
+    #[doc(hidden)]
+    Syslog(SyslogNotSupported),
     Terminal(TerminalLoggerConfig),
 }
 impl LoggerConfig {
@@ -86,6 +120,10 @@ impl LoggerConfig {
         match *self {
             LoggerConfig::File(ref mut c) => c.level = level,
             LoggerConfig::Null(_) => {}
+            #[cfg(unix)]
+            LoggerConfig::Syslog(ref mut c) => c.level = level,
+            #[cfg(not(unix))]
+            LoggerConfig::Syslog(_) => unreachable!(),
             LoggerConfig::Terminal(ref mut c) => c.level = level,
         }
     }
@@ -96,6 +134,10 @@ impl Config for LoggerConfig {
         match *self {
             LoggerConfig::File(ref c) => track!(c.try_to_builder()).map(LoggerBuilder::File),
             LoggerConfig::Null(ref c) => track!(c.try_to_builder()).map(LoggerBuilder::Null),
+            #[cfg(unix)]
+            LoggerConfig::Syslog(ref c) => track!(c.try_to_builder()).map(LoggerBuilder::Syslog),
+            #[cfg(not(unix))]
+            LoggerConfig::Syslog(_) => unreachable!(),
             LoggerConfig::Terminal(ref c) => {
                 track!(c.try_to_builder()).map(LoggerBuilder::Terminal)
             }

@@ -48,6 +48,7 @@ use libc::{closelog, openlog, syslog};
 /// only safe to free the string after `openlog` has been called with a
 /// different, non-null `ident`. Fortunately, all present-day implementations
 /// of `closelog` either clear the pointer or don't retain it at all.)
+#[allow(clippy::mutex_atomic)]
 static LAST_UNIQUE_IDENT: Lazy<Mutex<usize>> =
     Lazy::new(|| Mutex::new(ptr::null::<c_char>() as usize));
 

@@ -55,11 +55,13 @@ pub use misc::set_stdlog_logger;
 
 pub mod file;
 pub mod null;
+pub mod syslog;
 pub mod terminal;
 pub mod types;
 
 mod build;
 mod config;
+mod fake_syslog;
 mod error;
 mod misc;
 

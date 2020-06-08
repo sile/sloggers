@@ -1,7 +1,7 @@
-use crate::Build;
-use crate::syslog::{Facility, mock, SyslogBuilder};
 use crate::syslog::format::CustomMsgFormat;
+use crate::syslog::{mock, Facility, SyslogBuilder};
 use crate::types::{Severity, SourceLocation};
+use crate::Build;
 use slog::{debug, info};
 use std::ffi::CStr;
 
@@ -79,7 +79,9 @@ fn test_log() {
         mock::Event::SysLog {
             priority: libc::LOG_INFO,
             message_f: "%s".to_string(),
-            message: "Hello, world! This is a test message from `sloggers::syslog`. [test=\"message\"]".to_string()
+            message:
+                "Hello, world! This is a test message from `sloggers::syslog`. [test=\"message\"]"
+                    .to_string(),
         },
         mock::Event::OpenLog {
             facility: libc::LOG_LOCAL1,
@@ -100,5 +102,10 @@ fn test_log() {
         // No `CloseLog` for `logger2` because it doesn't own its `ident`.
     ];
 
-    assert!(events == expected_events, "events didn't match\ngot: {:#?}\nexpected: {:#?}", events, expected_events);
+    assert!(
+        events == expected_events,
+        "events didn't match\ngot: {:#?}\nexpected: {:#?}",
+        events,
+        expected_events
+    );
 }

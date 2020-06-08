@@ -1,10 +1,10 @@
-use crate::Config;
+use super::format::MsgFormatConfig;
+use super::{Facility, SyslogBuilder};
 use crate::types::{OverflowStrategy, Severity, SourceLocation};
+use crate::Config;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::ffi::CStr;
-use super::{Facility, SyslogBuilder};
-use super::format::MsgFormatConfig;
 
 /// The configuration of `SyslogBuilder`.
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -15,11 +15,11 @@ pub struct SyslogConfig {
     pub level: Severity,
 
     /// How to format syslog messages with structured data.
-    /// 
+    ///
     /// Possible values are `default` and `basic`.
-    /// 
+    ///
     /// See [`MsgFormat`] for more information.
-    /// 
+    ///
     /// [`MsgFormat`]: format/trait.MsgFormat.html
     pub format: MsgFormatConfig,
 
@@ -41,14 +41,14 @@ pub struct SyslogConfig {
 
     /// The name of this program, for inclusion with log messages. (POSIX calls
     /// this the “tag”.)
-    /// 
+    ///
     /// The string must not contain any zero (ASCII NUL) bytes.
-    /// 
+    ///
     /// # Default value
-    /// 
+    ///
     /// If a name is not given, the default behavior depends on the libc
     /// implementation in use.
-    /// 
+    ///
     /// BSD, GNU, and Apple libc use the actual process name. µClibc uses the
     /// constant string `syslog`. Fuchsia libc and musl libc use no name at
     /// all.
@@ -58,40 +58,40 @@ pub struct SyslogConfig {
     pub log_pid: bool,
 
     /// Whether to immediately open a connection to the syslog server.
-    /// 
+    ///
     /// If true, a connection will be immediately opened. If false, the
     /// connection will only be opened when the first log message is submitted.
-    /// 
+    ///
     /// The default is platform-defined, but on most platforms, the default is
     /// `true`.
-    /// 
+    ///
     /// On OpenBSD 5.6 and newer, this setting has no effect, because that
     /// platform uses a dedicated system call instead of a socket for
     /// submitting syslog messages.
     pub log_delay: Option<bool>,
 
     /// Also emit log messages on `stderr` (**see warning**).
-    /// 
+    ///
     /// # Warning
-    /// 
+    ///
     /// The libc `syslog` function is not subject to the global mutex that
     /// Rust uses to synchronize access to `stderr`. As a result, if one thread
     /// writes to `stderr` at the same time as another thread emits a log
     /// message with this option, the log message may appear in the middle of
     /// the other thread's output.
-    /// 
+    ///
     /// Note that this problem is not specific to Rust or this crate. Any
     /// program in any language that writes to `stderr` in one thread and logs
     /// to `syslog` with `LOG_PERROR` in another thread at the same time will
     /// have the same problem.
-    /// 
+    ///
     /// The exception is the `syslog` implementation in GNU libc, which
     /// implements this option by writing to `stderr` through the C `stdio`
     /// API (as opposed to the `write` system call), which has its own mutex.
     /// As long as all threads write to `stderr` using the C `stdio` API, log
     /// messages on this platform will never appear in the middle of other
     /// `stderr` output. However, Rust does not use the C `stdio` API for
-    /// writing to `stderr`, so even on GNU libc, using this option may result 
+    /// writing to `stderr`, so even on GNU libc, using this option may result
     /// in garbled output.
     pub log_perror: bool,
 }
@@ -151,8 +151,7 @@ impl Config for SyslogConfig {
         if let Some(log_delay) = self.log_delay {
             if log_delay {
                 b.log_odelay();
-            }
-            else {
+            } else {
                 b.log_ndelay();
             }
         }

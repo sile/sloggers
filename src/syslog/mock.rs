@@ -1,5 +1,5 @@
 //! Mocks for the POSIX `syslog` API.
-//! 
+//!
 //! The mock `syslog` function here is a bit different from the real one. It
 //! takes exactly three parameters, whereas the real one takes two or more.
 //! This works for our purposes because this crate always calls it with exactly
@@ -9,7 +9,7 @@ use libc::{c_char, c_int};
 use once_cell::sync::Lazy;
 use std::ffi::CStr;
 use std::mem;
-use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
+use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
 use std::sync::{Condvar, Mutex, MutexGuard};
 
 #[derive(Clone, Debug, Eq, PartialEq)]

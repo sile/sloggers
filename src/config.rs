@@ -74,13 +74,13 @@ pub trait Config {
 /// "#;
 /// let _config: LoggerConfig = serdeconv::from_toml_str(toml).unwrap();
 /// ```
-/// 
+///
 /// Syslog logger. (Unix-like systems only.)
-/// 
+///
 /// ```
 /// extern crate sloggers;
 /// extern crate serdeconv;
-/// 
+///
 /// use sloggers::LoggerConfig;
 ///
 /// let toml = r#"

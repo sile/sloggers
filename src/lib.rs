@@ -61,8 +61,8 @@ pub mod types;
 
 mod build;
 mod config;
-mod fake_syslog;
 mod error;
+mod fake_syslog;
 mod misc;
 
 /// A specialized `Result` type for this crate.

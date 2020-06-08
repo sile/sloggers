@@ -94,11 +94,11 @@ impl FromStr for Severity {
 /// assert!(params.only_pass_on_regex.is_none());
 /// assert!(params.always_suppress_on_regex.is_none());
 /// ```
-/// 
+///
 /// # Non-Exhaustive
-/// 
+///
 /// This structure is marked [non-exhaustive]. It cannot be constructed using a `struct` expression:
-/// 
+///
 /// ```compile_fail
 /// # use sloggers::types::{KVFilterParameters, Severity};
 /// let p = KVFilterParameters {
@@ -106,15 +106,15 @@ impl FromStr for Severity {
 ///     .. Default::default()
 /// };
 /// ```
-/// 
+///
 /// Instead, use the `new` method to construct it, then fill the fields in:
-/// 
+///
 /// ```
 /// # use sloggers::types::{KVFilterParameters, Severity};
 /// let mut p = KVFilterParameters::new();
 /// p.severity = Severity::Warning;
 /// ```
-/// 
+///
 /// [non-exhaustive]: https://doc.rust-lang.org/stable/reference/attributes/type_system.html#the-non_exhaustive-attribute
 #[derive(Debug, Clone)]
 #[allow(missing_docs)]

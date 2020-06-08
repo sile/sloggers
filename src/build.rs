@@ -52,7 +52,7 @@ impl Build for LoggerBuilder {
 }
 
 /// Common code for wrapping up a bare `Drain` into a finished `Logger`.
-/// 
+///
 /// This is just a data structure and a shared `build_with_drain` routine. Individual logger builders need to expose methods that fill in the fields of this `struct`, and their `Build` implementation needs to call `BuilderCommon::build_with_drain` after building the basic drain.
 #[derive(Debug)]
 pub(crate) struct BuilderCommon {

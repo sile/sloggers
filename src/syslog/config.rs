@@ -1,33 +1,51 @@
-use super::format::MsgFormatConfig;
-use super::{Facility, SyslogBuilder};
+use super::SyslogBuilder;
 use crate::types::{OverflowStrategy, Severity, SourceLocation};
 use crate::Config;
 use serde::{Deserialize, Serialize};
-use std::borrow::Cow;
-use std::ffi::CStr;
+use slog_syslog::config::ConfiguredMsgFormat;
+use slog_syslog::format::MsgFormat;
+use std::sync::Arc;
 
 /// The configuration of `SyslogBuilder`.
+///
+/// # TOML Example
+///
+/// ```
+/// # use sloggers::syslog::SyslogConfig;
+/// # use sloggers::types::Severity;
+/// # use slog_syslog::Facility;
+/// #
+/// # const TOML_CONFIG: &'static str = r#"
+/// format = "basic"
+/// ident = "foo"
+/// facility = "daemon"
+/// log_pid = true
+/// level = "warning"
+/// # "#;
+/// #
+/// # let config: SyslogConfig = toml::de::from_str(TOML_CONFIG).expect("deserialization failed");
+/// # assert_eq!(config.level, Severity::Warning);
+/// # assert_eq!(config.syslog_settings.facility, Facility::Daemon);
+/// ```
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[non_exhaustive]
 #[serde(default)]
 pub struct SyslogConfig {
+    /// Settings specific to syslog.
+    ///
+    /// This field is [flattened]: in a configuration file, the syslog settings
+    /// should appear directly at this level, not in a `syslog_settings`
+    /// subsection.
+    ///
+    /// [Flattened]: https://serde.rs/field-attrs.html#flatten
+    #[serde(flatten)]
+    pub syslog_settings: slog_syslog::config::SyslogConfig,
+
     /// Log level.
     pub level: Severity,
 
-    /// How to format syslog messages with structured data.
-    ///
-    /// Possible values are `default` and `basic`.
-    ///
-    /// See [`MsgFormat`] for more information.
-    ///
-    /// [`MsgFormat`]: format/trait.MsgFormat.html
-    pub format: MsgFormatConfig,
-
     /// Source code location
     pub source_location: SourceLocation,
-
-    /// The syslog facility to send logs to.
-    pub facility: Facility,
 
     /// Asynchronous channel size
     pub channel_size: usize,
@@ -38,62 +56,6 @@ pub struct SyslogConfig {
     ///
     /// The default value is `drop_and_report`.
     pub overflow_strategy: OverflowStrategy,
-
-    /// The name of this program, for inclusion with log messages. (POSIX calls
-    /// this the “tag”.)
-    ///
-    /// The string must not contain any zero (ASCII NUL) bytes.
-    ///
-    /// # Default value
-    ///
-    /// If a name is not given, the default behavior depends on the libc
-    /// implementation in use.
-    ///
-    /// BSD, GNU, and Apple libc use the actual process name. µClibc uses the
-    /// constant string `syslog`. Fuchsia libc and musl libc use no name at
-    /// all.
-    pub ident: Option<Cow<'static, CStr>>,
-
-    /// Include the process ID in log messages.
-    pub log_pid: bool,
-
-    /// Whether to immediately open a connection to the syslog server.
-    ///
-    /// If true, a connection will be immediately opened. If false, the
-    /// connection will only be opened when the first log message is submitted.
-    ///
-    /// The default is platform-defined, but on most platforms, the default is
-    /// `true`.
-    ///
-    /// On OpenBSD 5.6 and newer, this setting has no effect, because that
-    /// platform uses a dedicated system call instead of a socket for
-    /// submitting syslog messages.
-    pub log_delay: Option<bool>,
-
-    /// Also emit log messages on `stderr` (**see warning**).
-    ///
-    /// # Warning
-    ///
-    /// The libc `syslog` function is not subject to the global mutex that
-    /// Rust uses to synchronize access to `stderr`. As a result, if one thread
-    /// writes to `stderr` at the same time as another thread emits a log
-    /// message with this option, the log message may appear in the middle of
-    /// the other thread's output.
-    ///
-    /// Note that this problem is not specific to Rust or this crate. Any
-    /// program in any language that writes to `stderr` in one thread and logs
-    /// to `syslog` with `LOG_PERROR` in another thread at the same time will
-    /// have the same problem.
-    ///
-    /// The exception is the `syslog` implementation in GNU libc, which
-    /// implements this option by writing to `stderr` through the C `stdio`
-    /// API (as opposed to the `write` system call), which has its own mutex.
-    /// As long as all threads write to `stderr` using the C `stdio` API, log
-    /// messages on this platform will never appear in the middle of other
-    /// `stderr` output. However, Rust does not use the C `stdio` API for
-    /// writing to `stderr`, so even on GNU libc, using this option may result
-    /// in garbled output.
-    pub log_perror: bool,
 }
 
 impl SyslogConfig {
@@ -106,16 +68,11 @@ impl SyslogConfig {
 impl Default for SyslogConfig {
     fn default() -> Self {
         SyslogConfig {
+            syslog_settings: slog_syslog::config::SyslogConfig::default(),
             level: Severity::default(),
-            format: MsgFormatConfig::default(),
             source_location: SourceLocation::default(),
-            facility: Facility::default(),
             channel_size: 1024,
             overflow_strategy: OverflowStrategy::default(),
-            ident: None,
-            log_pid: false,
-            log_delay: None,
-            log_perror: false,
         }
     }
 }
@@ -124,41 +81,18 @@ impl Config for SyslogConfig {
     type Builder = SyslogBuilder;
 
     fn try_to_builder(&self) -> crate::Result<Self::Builder> {
-        let mut b = SyslogBuilder::new();
+        let inner_config = self.syslog_settings.clone();
+        let config_format = ConfiguredMsgFormat::from(inner_config.format.clone());
+
+        let inner_builder: slog_syslog::SyslogBuilder<Arc<dyn MsgFormat + Send + Sync + 'static>> =
+            inner_config.into_builder().format(Arc::new(config_format));
+
+        let mut b = SyslogBuilder::from(inner_builder);
 
         b.level(self.level);
         b.source_location(self.source_location);
-        b.facility(self.facility);
         b.channel_size(self.channel_size);
         b.overflow_strategy(self.overflow_strategy);
-
-        // Don't make this call if not using a non-default format, or there
-        // will be an unnecessary extra allocation. `SyslogBuilder::new`
-        // already allocates an `Arc<dyn MsgFormat>`, and this call allocates
-        // another one.
-        if self.format != MsgFormatConfig::Default {
-            b.format_arc((&self.format).into());
-        }
-
-        if let Some(ident) = &self.ident {
-            b.ident(ident.clone());
-        }
-
-        if self.log_pid {
-            b.log_pid();
-        }
-
-        if let Some(log_delay) = self.log_delay {
-            if log_delay {
-                b.log_odelay();
-            } else {
-                b.log_ndelay();
-            }
-        }
-
-        if self.log_perror {
-            b.log_perror();
-        }
 
         Ok(b)
     }

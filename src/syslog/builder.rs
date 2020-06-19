@@ -1,5 +1,5 @@
 use super::format::{DefaultMsgFormat, MsgFormat};
-use super::{Facility, SyslogDrain};
+use super::Facility;
 use crate::build::BuilderCommon;
 #[cfg(feature = "slog-kvfilter")]
 use crate::types::KVFilterParameters;
@@ -11,6 +11,8 @@ use std::borrow::Cow;
 use std::ffi::{CStr, CString};
 use std::fmt::Debug;
 use std::sync::Arc;
+
+type InnerBuilder = slog_syslog::SyslogBuilder<Arc<dyn MsgFormat + Send + Sync + 'static>>;
 
 /// A logger builder which builds loggers that send log records to a syslog server.
 ///
@@ -43,21 +45,24 @@ use std::sync::Arc;
 /// ```
 #[derive(Debug)]
 pub struct SyslogBuilder {
-    pub(super) common: BuilderCommon,
-    pub(super) facility: Facility,
-    pub(super) ident: Option<Cow<'static, CStr>>,
-    pub(super) option: libc::c_int,
-    pub(super) format: Arc<dyn MsgFormat>,
+    common: BuilderCommon,
+    inner: Option<InnerBuilder>,
 }
 
 impl Default for SyslogBuilder {
     fn default() -> Self {
         SyslogBuilder {
             common: BuilderCommon::default(),
-            facility: Facility::default(),
-            ident: None,
-            option: 0,
-            format: Arc::new(DefaultMsgFormat),
+            inner: Some(slog_syslog::SyslogBuilder::new().format(Arc::new(DefaultMsgFormat))),
+        }
+    }
+}
+
+impl From<InnerBuilder> for SyslogBuilder {
+    fn from(builder: InnerBuilder) -> Self {
+        SyslogBuilder {
+            common: BuilderCommon::default(),
+            inner: Some(builder),
         }
     }
 }
@@ -68,6 +73,18 @@ impl SyslogBuilder {
         SyslogBuilder::default()
     }
 
+    fn take_inner(&mut self) -> InnerBuilder {
+        self.inner
+            .take()
+            .expect("`SyslogBuilder` in invalid state caused by prior panic")
+    }
+
+    fn borrow_inner(&self) -> &InnerBuilder {
+        self.inner
+            .as_ref()
+            .expect("`SyslogBuilder` in invalid state caused by prior panic")
+    }
+
     /// Sets the source code location type this logger will use.
     pub fn source_location(&mut self, source_location: SourceLocation) -> &mut Self {
         self.common.source_location = source_location;
@@ -76,9 +93,11 @@ impl SyslogBuilder {
 
     /// Sets the syslog facility to send logs to.
     ///
-    /// By default, this is the `user` facility.
+    /// By default, this is [`Facility::User`].
+    ///
+    /// [`Facility::User`]: enum.Facility.html#variant.User
     pub fn facility(&mut self, facility: Facility) -> &mut Self {
-        self.facility = facility;
+        self.inner = Some(self.take_inner().facility(facility));
         self
     }
 
@@ -187,7 +206,7 @@ impl SyslogBuilder {
     ///     .unwrap();
     /// ```
     pub fn ident(&mut self, ident: impl Into<Cow<'static, CStr>>) -> &mut Self {
-        self.ident = Some(ident.into());
+        self.inner = Some(self.take_inner().ident(ident));
         self
     }
 
@@ -199,7 +218,7 @@ impl SyslogBuilder {
     /// Include the process ID in log messages.
     #[inline]
     pub fn log_pid(&mut self) -> &mut Self {
-        self.option |= libc::LOG_PID;
+        self.inner = Some(self.take_inner().log_pid());
         self
     }
 
@@ -215,7 +234,7 @@ impl SyslogBuilder {
     /// submitting syslog messages.
     #[inline]
     pub fn log_ndelay(&mut self) -> &mut Self {
-        self.option = (self.option & !libc::LOG_ODELAY) | libc::LOG_NDELAY;
+        self.inner = Some(self.take_inner().log_ndelay());
         self
     }
 
@@ -231,7 +250,7 @@ impl SyslogBuilder {
     /// submitting syslog messages.
     #[inline]
     pub fn log_odelay(&mut self) -> &mut Self {
-        self.option = (self.option & !libc::LOG_NDELAY) | libc::LOG_ODELAY;
+        self.inner = Some(self.take_inner().log_odelay());
         self
     }
 
@@ -251,7 +270,7 @@ impl SyslogBuilder {
     /// [POSIX defines it]: https://pubs.opengroup.org/onlinepubs/9699919799/functions/closelog.html
     #[inline]
     pub fn log_nowait(&mut self) -> &mut Self {
-        self.option |= libc::LOG_NOWAIT;
+        self.inner = Some(self.take_inner().log_nowait());
         self
     }
 
@@ -280,7 +299,7 @@ impl SyslogBuilder {
     /// in garbled output.
     #[inline]
     pub fn log_perror(&mut self) -> &mut Self {
-        self.option |= libc::LOG_PERROR;
+        self.inner = Some(self.take_inner().log_perror());
         self
     }
 
@@ -305,7 +324,7 @@ impl SyslogBuilder {
     /// ```
     ///
     /// [`DefaultMsgFormat`]: format/struct.DefaultMsgFormat.html
-    pub fn format(&mut self, format: impl MsgFormat + 'static) -> &mut Self {
+    pub fn format(&mut self, format: impl MsgFormat + Send + Sync + 'static) -> &mut Self {
         self.format_arc(Arc::new(format))
     }
 
@@ -334,8 +353,8 @@ impl SyslogBuilder {
     /// ```
     ///
     /// [`DefaultMsgFormat`]: format/struct.DefaultMsgFormat.html
-    pub fn format_arc(&mut self, format: Arc<dyn MsgFormat>) -> &mut Self {
-        self.format = format;
+    pub fn format_arc(&mut self, format: Arc<dyn MsgFormat + Send + Sync + 'static>) -> &mut Self {
+        self.inner = Some(self.take_inner().format(format));
         self
     }
 
@@ -363,7 +382,7 @@ impl SyslogBuilder {
 
 impl Build for SyslogBuilder {
     fn build(&self) -> Result<Logger> {
-        let drain = SyslogDrain::new(self);
+        let drain = self.borrow_inner().clone().build();
         let logger = self.common.build_with_drain(drain);
         Ok(logger)
     }

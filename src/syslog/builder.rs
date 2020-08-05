@@ -1,18 +1,18 @@
-use super::format::{DefaultMsgFormat, MsgFormat};
-use super::Facility;
+use super::adapter::{Adapter, DefaultAdapter};
+use super::{Facility, Priority};
 use crate::build::BuilderCommon;
 #[cfg(feature = "slog-kvfilter")]
 use crate::types::KVFilterParameters;
 use crate::types::{OverflowStrategy, Severity, SourceLocation};
 use crate::Build;
 use crate::Result;
-use slog::Logger;
+use slog::{Logger, OwnedKVList, Record};
 use std::borrow::Cow;
 use std::ffi::{CStr, CString};
-use std::fmt::Debug;
+use std::fmt::{self, Debug};
 use std::sync::Arc;
 
-type InnerBuilder = slog_syslog::SyslogBuilder<Arc<dyn MsgFormat + Send + Sync + 'static>>;
+type InnerBuilder = slog_syslog::SyslogBuilder<Arc<dyn Adapter + Send + Sync + 'static>>;
 
 /// A logger builder which builds loggers that send log records to a syslog server.
 ///
@@ -53,7 +53,7 @@ impl Default for SyslogBuilder {
     fn default() -> Self {
         SyslogBuilder {
             common: BuilderCommon::default(),
-            inner: Some(slog_syslog::SyslogBuilder::new().format(Arc::new(DefaultMsgFormat))),
+            inner: Some(slog_syslog::SyslogBuilder::new().adapter(Arc::new(DefaultAdapter))),
         }
     }
 }
@@ -303,9 +303,12 @@ impl SyslogBuilder {
         self
     }
 
-    /// Set a format for log messages and structured data.
+    /// Set the [`Adapter`], which handles formatting and message priorities.
     ///
-    /// The default is [`DefaultMsgFormat`].
+    /// See also the [`format`] and [`priority`] methods, which offer a
+    /// convenient way to customize formatting or priority mapping.
+    ///
+    /// The default is [`DefaultAdapter`].
     ///
     /// This method wraps the format in an `Arc`. If your format is alrady
     /// wrapped in an `Arc`, call the `format_arc` method instead.
@@ -314,51 +317,213 @@ impl SyslogBuilder {
     ///
     /// ```
     /// use sloggers::Build;
-    /// use sloggers::syslog::format::BasicMsgFormat;
+    /// use sloggers::syslog::adapter::BasicAdapter;
     /// use sloggers::syslog::SyslogBuilder;
     ///
     /// let logger = SyslogBuilder::new()
-    ///     .format(BasicMsgFormat)
+    ///     .adapter(BasicAdapter)
     ///     .build()
     ///     .unwrap();
     /// ```
     ///
-    /// [`DefaultMsgFormat`]: format/struct.DefaultMsgFormat.html
-    pub fn format(&mut self, format: impl MsgFormat + Send + Sync + 'static) -> &mut Self {
-        self.format_arc(Arc::new(format))
+    /// [`Adapter`]: adapter/trait.Adapter.html
+    /// [`DefaultAdapter`]: adapter/struct.DefaultAdapter.html
+    /// [`format`]: #method.format
+    /// [`priority`]: #method.priority
+    pub fn adapter(&mut self, adapter: impl Adapter + Send + Sync + 'static) -> &mut Self {
+        self.adapter_arc(Arc::new(adapter))
     }
 
-    /// Set a custom format for log messages and structured data.
+    /// Set the [`Adapter`], which handles formatting and message priorities.
     ///
-    /// The default is [`DefaultMsgFormat`].
+    /// See also the [`format`] and [`priority`] methods, which offer a
+    /// convenient way to customize formatting or priority mapping.
     ///
-    /// This method takes the format wrapped in an `Arc`. Call this if your
-    /// format is already wrapped in an `Arc`. If not, call the `format` method
-    /// instead.
+    /// The default is [`DefaultAdapter`].
+    ///
+    /// This method takes the [`Adapter`] wrapped in an `Arc`. Call this if
+    /// your [`Adapter`] is already wrapped in an `Arc`. If not, call the
+    /// [`adapter`][`Self::adapter`] method instead.
     ///
     /// # Example
     ///
     /// ```
     /// use sloggers::Build;
-    /// use sloggers::syslog::format::BasicMsgFormat;
+    /// use sloggers::syslog::adapter::BasicAdapter;
     /// use sloggers::syslog::SyslogBuilder;
     /// use std::sync::Arc;
     ///
-    /// let format = Arc::new(BasicMsgFormat);
+    /// let adapter = Arc::new(BasicAdapter);
     ///
     /// let logger = SyslogBuilder::new()
-    ///     .format_arc(format.clone())
+    ///     .adapter_arc(adapter.clone())
     ///     .build()
     ///     .unwrap();
     /// ```
     ///
-    /// [`DefaultMsgFormat`]: format/struct.DefaultMsgFormat.html
-    pub fn format_arc(&mut self, format: Arc<dyn MsgFormat + Send + Sync + 'static>) -> &mut Self {
-        self.inner = Some(self.take_inner().format(format));
+    /// [`Self::adapter`]: #method.adapter
+    /// [`Adapter`]: adapter/trait.Adapter.html
+    /// [`DefaultAdapter`]: adapter/struct.DefaultAdapter.html
+    /// [`format`]: #method.format
+    /// [`priority`]: #method.priority
+    pub fn adapter_arc(&mut self, adapter: Arc<dyn Adapter + Send + Sync + 'static>) -> &mut Self {
+        self.inner = Some(self.take_inner().adapter(adapter));
         self
     }
 
+    /// Modify the [`Adapter`], which handles formatting and message
+    /// priorities.
+    ///
+    /// This method supplies the current [`Adapter`] to the provided closure,
+    /// then replaces the current [`Adapter`] with the one that the closure
+    /// returns.
+    ///
+    /// The [`adapter`][`Self::adapter`], [`format`], and [`priority`] methods
+    /// all call this method to replace the [`Adapter`].
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use sloggers::Build;
+    /// use sloggers::syslog::adapter::{Adapter, DefaultAdapter};
+    /// use sloggers::syslog::SyslogBuilder;
+    /// use std::sync::Arc;
+    ///
+    /// let logger = SyslogBuilder::new()
+    ///     .map_adapter(|adapter| Arc::new(adapter.with_fmt(|f, record, _| {
+    ///         write!(f, "here's a message: {}", record.msg())?;
+    ///         Ok(())
+    ///     })))
+    ///     .build()
+    ///     .unwrap();
+    /// ```
+    ///
+    /// [`Self::adapter`]: #method.adapter
+    /// [`Adapter`]: adapter/trait.Adapter.html
+    /// [`format`]: #method.format
+    /// [`priority`]: #method.priority
+    pub fn map_adapter(
+        &mut self,
+        replacer: impl FnOnce(Arc<dyn Adapter + Send + Sync + 'static>) -> Arc<dyn Adapter + Send + Sync + 'static>,
+    ) -> &mut Self {
+        self.inner = Some(self.take_inner().map_adapter(replacer));
+        self
+    }
+
+    /// Use custom message formatting.
+    ///
+    /// Syslog does not support structured log data. If Slog key-value pairs
+    /// are to be included with log messages, they must be included as part of
+    /// the message. The closure provided to this method decides if and how
+    /// this will be done.
+    ///
+    /// # Example
+    ///
+    /// This formatting function simply prepends `here's a message: ` to each
+    /// log message:
+    ///
+    /// ```
+    /// use sloggers::Build;
+    /// use sloggers::syslog::SyslogBuilder;
+    ///
+    /// let logger = SyslogBuilder::new()
+    ///     .format(|f, record, _| {
+    ///         write!(f, "here's a message: {}", record.msg())?;
+    ///         Ok(())
+    ///     })
+    ///     .build()
+    ///     .unwrap();
+    /// ```
+    ///
+    /// Note the use of the `?` operator. The closure is expected to return
+    /// `Result<(), slog::Error>`, not the `Result<(), std::fmt::Error>` that
+    /// `write!` returns. `slog::Error` does have a conversion from
+    /// `std::fmt::Error`, which the `?` operator will automatically perform.
+    ///
+    /// [`Adapter::with_fmt`]: adapter/trait.Adapter.html#method.with_fmt
+    pub fn format(
+        &mut self,
+        fmt_fn: impl (Fn(&mut fmt::Formatter, &Record, &OwnedKVList) -> slog::Result) + Send + Sync + 'static,
+    ) -> &mut Self {
+        self.map_adapter(|adapter| Arc::new(adapter.with_fmt(fmt_fn)))
+    }
+
+    /// Customize mapping of [`slog::Level`]s to
+    /// [syslog priorities][`Priority`].
+    ///
+    /// # Example
+    ///
+    /// ## Force all messages to [`Level::Err`]
+    ///
+    /// This uses the default message formatting, but makes all syslog messages
+    /// be [`Level::Err`]:
+    ///
+    /// ```
+    /// use sloggers::Build;
+    /// use sloggers::syslog::{Level, SyslogBuilder};
+    ///
+    /// let logger = SyslogBuilder::new()
+    ///     .priority(|record, _| {
+    ///         Level::Err.into()
+    ///     })
+    ///     .build()
+    ///     .unwrap();
+    /// ```
+    ///
+    /// Notice the use of `into()`. [`Level`] can be converted directly into
+    /// [`Priority`].
+    ///
+    /// ## Override level and facility
+    ///
+    /// In this example, [`slog::Level::Info`] messages from the `my_app::mail`
+    /// module are logged as [`Level::Notice`] instead of the default
+    /// [`Level::Info`], and all messages from that module are logged with a
+    /// different facility:
+    ///
+    /// ```
+    /// use sloggers::Build;
+    /// use sloggers::syslog::{Facility, Level, Priority, SyslogBuilder};
+    ///
+    /// let drain = SyslogBuilder::new()
+    ///     .facility(Facility::Daemon)
+    ///     .priority(|record, _| {
+    ///         Priority::new(
+    ///             match record.level() {
+    ///                 slog::Level::Info => Level::Notice,
+    ///                 other => Level::from_slog(other),
+    ///             },
+    ///             match record.module() {
+    ///                 "my_app::mail" => Some(Facility::Mail),
+    ///                 _ => None,
+    ///             },
+    ///         )
+    ///     })
+    ///     .build()
+    ///     .unwrap();
+    /// ```
+    ///
+    /// [`Level`]: enum.Level.html
+    /// [`Level::Err`]: enum.Level.html#variant.Err
+    /// [`Level::Info`]: enum.Level.html#variant.Info
+    /// [`Level::Notice`]: enum.Level.html#variant.Notice
+    /// [`Priority`]: struct.Priority.html
+    /// [`slog::Level`]: https://docs.rs/slog/2/slog/enum.Level.html
+    /// [`slog::Level::Info`]: https://docs.rs/slog/2/slog/enum.Level.html#variant.Info
+    /// [`SyslogBuilder::priority`]: struct.SyslogBuilder.html#method.priority
+    pub fn priority(
+        &mut self,
+        priority_fn: impl (Fn(&Record, &OwnedKVList) -> Priority) + Send + Sync + 'static,
+    ) -> &mut Self {
+        self.map_adapter(|adapter| Arc::new(adapter.with_priority(priority_fn)))
+    }
+
     /// Sets the log level of this logger.
+    ///
+    /// Not to be confused with the [`priority`] method. This method *filters*
+    /// log messages; [`priority`] *changes* their [syslog priority].
+    ///
+    /// [`priority`]: #method.priority
+    /// [syslog priority]: struct.Priority.html
     pub fn level(&mut self, severity: Severity) -> &mut Self {
         self.common.level = severity;
         self

@@ -2,8 +2,8 @@ use super::SyslogBuilder;
 use crate::types::{OverflowStrategy, Severity, SourceLocation};
 use crate::Config;
 use serde::{Deserialize, Serialize};
-use slog_syslog::config::ConfiguredMsgFormat;
-use slog_syslog::format::MsgFormat;
+use slog_syslog::adapter::Adapter;
+use slog_syslog::config::ConfiguredAdapter;
 use std::sync::Arc;
 
 /// The configuration of `SyslogBuilder`.
@@ -82,10 +82,13 @@ impl Config for SyslogConfig {
 
     fn try_to_builder(&self) -> crate::Result<Self::Builder> {
         let inner_config = self.syslog_settings.clone();
-        let config_format = ConfiguredMsgFormat::from(inner_config.format.clone());
+        let config_adapter = ConfiguredAdapter::from((
+            inner_config.format.clone(),
+            inner_config.priority.clone(),
+        ));
 
-        let inner_builder: slog_syslog::SyslogBuilder<Arc<dyn MsgFormat + Send + Sync + 'static>> =
-            inner_config.into_builder().format(Arc::new(config_format));
+        let inner_builder: slog_syslog::SyslogBuilder<Arc<dyn Adapter + Send + Sync + 'static>> =
+            inner_config.into_builder().adapter(Arc::new(config_adapter));
 
         let mut b = SyslogBuilder::from(inner_builder);
 

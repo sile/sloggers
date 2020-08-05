@@ -36,4 +36,4 @@ pub use builder::*;
 mod config;
 pub use config::*;
 
-pub use slog_syslog::{format, Facility, UnknownFacilityError};
+pub use slog_syslog::{adapter, Facility, Level, Priority, UnknownFacilityError, UnknownLevelError};

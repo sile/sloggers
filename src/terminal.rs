@@ -101,6 +101,13 @@ impl Build for TerminalLoggerBuilder {
                 let format = CompactFormat::new(decorator).use_custom_timestamp(timestamp);
                 self.common.build_with_drain(format.build())
             }
+            #[cfg(feature = "json")]
+            Format::Json => {
+                match self.destination {
+                    Destination::Stdout => self.common.build_with_drain(slog_json::Json::default(std::io::stdout())),
+                    Destination::Stderr => self.common.build_with_drain(slog_json::Json::default(std::io::stderr())),
+                }
+            }
         };
         Ok(logger)
     }

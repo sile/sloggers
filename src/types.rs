@@ -168,6 +168,10 @@ pub enum Format {
 
     /// Compact format.
     Compact,
+
+    /// JSON format.
+    #[cfg(feature = "json")]
+    Json,
 }
 impl Default for Format {
     fn default() -> Self {
@@ -180,6 +184,8 @@ impl FromStr for Format {
         match s {
             "full" => Ok(Format::Full),
             "compact" => Ok(Format::Compact),
+            #[cfg(feature = "json")]
+            "json" => Ok(Format::Json),
             _ => track_panic!(ErrorKind::Invalid, "Undefined log format: {:?}", s),
         }
     }

@@ -117,7 +117,7 @@ impl FromStr for Severity {
 ///
 /// [non-exhaustive]: https://doc.rust-lang.org/stable/reference/attributes/type_system.html#the-non_exhaustive-attribute
 #[derive(Debug, Clone)]
-#[allow(missing_docs)]
+#[allow(missing_docs, clippy::upper_case_acronyms)]
 #[cfg(feature = "slog-kvfilter")]
 #[non_exhaustive]
 pub struct KVFilterParameters {

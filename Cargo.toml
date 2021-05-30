@@ -16,6 +16,7 @@ codecov = {repository = "sile/sloggers"}
 
 [features]
 default = ["libflate", "slog-kvfilter"]
+json = ["slog-json"]
 
 [dependencies]
 chrono="0.4"
@@ -26,6 +27,7 @@ slog-async = "2"
 slog-term = "2"
 slog-scope = "4"
 slog-kvfilter = {version = "~0.7", optional = true}
+slog-json = {version = "2.3.0", optional = true}
 slog-stdlog = "4"
 trackable = "1"
 regex="1"

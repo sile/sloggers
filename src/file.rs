@@ -140,16 +140,22 @@ impl FileLoggerBuilder {
 
 impl Build for FileLoggerBuilder {
     fn build(&self) -> Result<Logger> {
-        let decorator = PlainDecorator::new(self.appender.clone());
         let timestamp = misc::timezone_to_timestamp_fn(self.timezone);
         let logger = match self.format {
             Format::Full => {
+                let decorator = PlainDecorator::new(self.appender.clone());
                 let format = FullFormat::new(decorator).use_custom_timestamp(timestamp);
                 self.common.build_with_drain(format.build())
             }
             Format::Compact => {
+                let decorator = PlainDecorator::new(self.appender.clone());
                 let format = CompactFormat::new(decorator).use_custom_timestamp(timestamp);
                 self.common.build_with_drain(format.build())
+            }
+            #[cfg(feature = "json")]
+            Format::Json => {
+                let drain = slog_json::Json::default(self.appender.clone());
+                self.common.build_with_drain(drain)
             }
         };
         Ok(logger)

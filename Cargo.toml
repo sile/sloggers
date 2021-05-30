@@ -11,8 +11,7 @@ license = "MIT"
 edition = "2018"
 
 [badges]
-travis-ci = {repository = "sile/sloggers"}
-codecov = {repository = "sile/sloggers"}
+coveralls = {repository = "sile/sloggers"}
 
 [features]
 default = ["libflate", "slog-kvfilter"]

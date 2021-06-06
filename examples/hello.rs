@@ -1,8 +1,5 @@
-extern crate clap;
-extern crate serdeconv;
 #[macro_use]
 extern crate slog;
-extern crate sloggers;
 #[macro_use]
 extern crate trackable;
 

@@ -5,12 +5,13 @@ use slog_kvfilter::KVFilter;
 use slog_scope;
 use slog_stdlog;
 use slog_term;
+use crate::types::TimeZone;
+use crate::{ErrorKind, Result};
 use std::io;
+use std::path::Path;
 use trackable::error::ErrorKindExt;
-use types::KVFilterParameters;
-
-use types::{ProcessID, Severity, SourceLocation, TimeZone};
-use {ErrorKind, Result};
+use crate::types::KVFilterParameters;
+use crate::types::{ProcessID, Severity, SourceLocation};
 
 /// Sets the logger for the log records emitted via `log` crate.
 pub fn set_stdlog_logger(logger: Logger) -> Result<()> {
@@ -26,7 +27,19 @@ pub fn getpid(_record: &Record) -> String {
     format!("{}", std::process::id())
 }
 
-pub fn timezone_to_timestamp_fn(timezone: TimeZone) -> fn(&mut io::Write) -> io::Result<()> {
+pub fn file_and_line(record: &Record) -> String {
+    format!("{}:{}", record.file(), record.line())
+}
+
+pub fn local_file_and_line(record: &Record) -> String {
+    if Path::new(record.file()).is_relative() {
+        file_and_line(record)
+    } else {
+        module_and_line(record)
+    }
+}
+
+pub fn timezone_to_timestamp_fn(timezone: TimeZone) -> fn(&mut dyn io::Write) -> io::Result<()> {
     match timezone {
         TimeZone::Utc => slog_term::timestamp_utc,
         TimeZone::Local => slog_term::timestamp_local,
@@ -52,6 +65,18 @@ pub fn build_with_options(
 
         match (source_location, process_id) {
             (SourceLocation::None, ProcessID(false)) => Logger::root(drain.fuse(), o!()),
+            (SourceLocation::FileAndLine, _) => Logger::root(
+                drain.fuse(),
+                o!(
+                       "module" => FnValue(file_and_line),
+                    ),
+            ),
+            (SourceLocation::LocalFileAndLine, _) => Logger::root(
+                drain.fuse(),
+                o!(
+                       "module" => FnValue(local_file_and_line),
+                    ),
+            ),
             (SourceLocation::ModuleAndLine, ProcessID(false)) => Logger::root(
                 drain.fuse(),
                 o!(
@@ -77,6 +102,18 @@ pub fn build_with_options(
 
         match (source_location, process_id) {
             (SourceLocation::None, ProcessID(false)) => Logger::root(drain.fuse(), o!()),
+            (SourceLocation::FileAndLine, _) => Logger::root(
+                drain.fuse(),
+                o!(
+                       "module" => FnValue(file_and_line),
+                    ),
+            ),
+            (SourceLocation::LocalFileAndLine, _) => Logger::root(
+                drain.fuse(),
+                o!(
+                       "module" => FnValue(local_file_and_line),
+                    ),
+            ),
             (SourceLocation::ModuleAndLine, ProcessID(false)) => Logger::root(
                 drain.fuse(),
                 o!(

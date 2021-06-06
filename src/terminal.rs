@@ -1,20 +1,24 @@
 //! Terminal logger.
 use slog::{self, Drain, Logger};
 use slog_async::Async;
+use crate::build::BuilderCommon;
+use crate::misc;
+#[cfg(feature = "slog-kvfilter")]
+use crate::types::KVFilterParameters;
+use crate::types::{Format, OverflowStrategy, Severity, SourceLocation, ProcessID, TimeZone};
+use crate::{Build, Config, Result};
+use serde::{Deserialize, Serialize};
 use slog_term::{self, CompactFormat, FullFormat, PlainDecorator, TermDecorator};
 use std::fmt::Debug;
 use std::io;
-
-use misc::{timezone_to_timestamp_fn, build_with_options};
-use types::KVFilterParameters;
-use types::{Format, Severity, SourceLocation, ProcessID, TimeZone};
-use {Build, Config, Result};
+use misc::{build_with_options};
 
 /// A logger builder which build loggers that output log records to the terminal.
 ///
 /// The resulting logger will work asynchronously (the default channel size is 1024).
 #[derive(Debug)]
 pub struct TerminalLoggerBuilder {
+    common: BuilderCommon,
     format: Format,
     source_location: SourceLocation,
     process_id: ProcessID,
@@ -28,6 +32,7 @@ impl TerminalLoggerBuilder {
     /// Makes a new `TerminalLoggerBuilder` instance.
     pub fn new() -> Self {
         TerminalLoggerBuilder {
+            common: BuilderCommon::default(),
             format: Format::default(),
             source_location: SourceLocation::default(),
             process_id: ProcessID::default(),
@@ -47,7 +52,13 @@ impl TerminalLoggerBuilder {
 
     /// Sets the source code location type this logger will use.
     pub fn source_location(&mut self, source_location: SourceLocation) -> &mut Self {
-        self.source_location = source_location;
+        self.common.source_location = source_location;
+        self
+    }
+
+    /// Sets the overflow strategy for the logger.
+    pub fn overflow_strategy(&mut self, overflow_strategy: OverflowStrategy) -> &mut Self {
+        self.common.overflow_strategy = overflow_strategy;
         self
     }
 
@@ -71,25 +82,27 @@ impl TerminalLoggerBuilder {
 
     /// Sets the log level of this logger.
     pub fn level(&mut self, severity: Severity) -> &mut Self {
-        self.level = severity;
+        self.common.level = severity;
         self
     }
 
     /// Sets the size of the asynchronous channel of this logger.
     pub fn channel_size(&mut self, channel_size: usize) -> &mut Self {
-        self.channel_size = channel_size;
+        self.common.channel_size = channel_size;
         self
     }
 
     /// Sets [`KVFilter`].
     ///
     /// [`KVFilter`]: https://docs.rs/slog-kvfilter/0.6/slog_kvfilter/struct.KVFilter.html
+    #[cfg(feature = "slog-kvfilter")]
     pub fn kvfilter(&mut self, parameters: KVFilterParameters) -> &mut Self {
-        self.kvfilterparameters = Some(parameters);
+        self.common.kvfilterparameters = Some(parameters);
         self
     }
 
-    fn build_with_drain<D>(&self, drain: D) -> Logger
+    /// allows to build from a drain
+    pub fn build_with_drain<D>(&self, drain: D) -> Logger
     where
         D: Drain + Send + 'static,
         D::Err: Debug,
@@ -115,16 +128,25 @@ impl Default for TerminalLoggerBuilder {
 impl Build for TerminalLoggerBuilder {
     fn build(&self) -> Result<Logger> {
         let decorator = self.destination.to_decorator();
-        let timestamp = timezone_to_timestamp_fn(self.timezone);
+        let timestamp = misc::timezone_to_timestamp_fn(self.timezone);
         let logger = match self.format {
             Format::Full => {
                 let format = FullFormat::new(decorator).use_custom_timestamp(timestamp);
-                self.build_with_drain(format.build())
+                self.common.build_with_drain(format.build())
             }
             Format::Compact => {
                 let format = CompactFormat::new(decorator).use_custom_timestamp(timestamp);
-                self.build_with_drain(format.build())
+                self.common.build_with_drain(format.build())
             }
+            #[cfg(feature = "json")]
+            Format::Json => match self.destination {
+                Destination::Stdout => self
+                    .common
+                    .build_with_drain(slog_json::Json::default(std::io::stdout())),
+                Destination::Stderr => self
+                    .common
+                    .build_with_drain(slog_json::Json::default(std::io::stderr())),
+            },
         };
         Ok(logger)
     }
@@ -139,7 +161,7 @@ impl Build for TerminalLoggerBuilder {
 /// ```
 /// use sloggers::terminal::Destination;
 ///
-/// assert_eq!(Destination::default(), Destination::Stdout);
+/// assert_eq!(Destination::default(), Destination::Stderr);
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -152,7 +174,7 @@ pub enum Destination {
 }
 impl Default for Destination {
     fn default() -> Self {
-        Destination::Stdout
+        Destination::Stderr
     }
 }
 impl Destination {
@@ -183,7 +205,7 @@ impl slog_term::Decorator for Decorator {
         f: F,
     ) -> io::Result<()>
     where
-        F: FnOnce(&mut slog_term::RecordDecorator) -> io::Result<()>,
+        F: FnOnce(&mut dyn slog_term::RecordDecorator) -> io::Result<()>,
     {
         match *self {
             Decorator::Term(ref d) => d.with_record(record, logger_values, f),
@@ -195,6 +217,7 @@ impl slog_term::Decorator for Decorator {
 
 /// The configuration of `TerminalLoggerBuilder`.
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct TerminalLoggerConfig {
     /// Log level.
     #[serde(default)]
@@ -223,6 +246,20 @@ pub struct TerminalLoggerConfig {
     /// Asynchronous channel size
     #[serde(default = "default_channel_size")]
     pub channel_size: usize,
+
+    /// Whether to drop logs on overflow.
+    ///
+    /// The possible values are `drop`, `drop_and_report`, or `block`.
+    ///
+    /// The default value is `drop_and_report`.
+    #[serde(default)]
+    pub overflow_strategy: OverflowStrategy,
+}
+impl TerminalLoggerConfig {
+    /// Creates a new `TerminalLoggerConfig` with default settings.
+    pub fn new() -> Self {
+        Default::default()
+    }
 }
 impl Config for TerminalLoggerConfig {
     type Builder = TerminalLoggerBuilder;
@@ -235,6 +272,7 @@ impl Config for TerminalLoggerConfig {
         builder.timezone(self.timezone);
         builder.destination(self.destination);
         builder.channel_size(self.channel_size);
+        builder.overflow_strategy(self.overflow_strategy);
         Ok(builder)
     }
 }

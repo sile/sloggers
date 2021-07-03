@@ -160,7 +160,7 @@ impl<W: fmt::Write> fmt::Write for Rfc5424LikeValueEscaper<W> {
             if s.len() >= index {
                 s = &s[(index + 1)..];
             } else {
-                s = &"";
+                s = "";
                 break;
             }
         }

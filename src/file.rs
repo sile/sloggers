@@ -276,6 +276,28 @@ impl FileAppender {
 
         let _ = self.file.take();
 
+        #[cfg(windows)]
+        {
+            if let Err(err) = self.rotate_old_files() {
+                const ERROR_SHARING_VIOLATION: i32 = 32;
+
+                // To avoid the problem reported by https://github.com/sile/sloggers/issues/43,
+                // we ignore the error if its code is 32.
+                if err.raw_os_error() != Some(ERROR_SHARING_VIOLATION) {
+                    return Err(err);
+                }
+            }
+        }
+        #[cfg(not(windows))]
+        self.rotate_old_files()?;
+
+        self.written_size = 0;
+        self.next_reopen_check = Instant::now();
+        self.reopen_if_needed()?;
+
+        Ok(())
+    }
+    fn rotate_old_files(&mut self) -> io::Result<()> {
         for i in (1..=self.rotate_keep).rev() {
             let from = self.rotated_path(i)?;
             let to = self.rotated_path(i + 1)?;
@@ -310,10 +332,6 @@ impl FileAppender {
         if delete_path.exists() {
             fs::remove_file(delete_path)?;
         }
-
-        self.written_size = 0;
-        self.next_reopen_check = Instant::now();
-        self.reopen_if_needed()?;
 
         Ok(())
     }

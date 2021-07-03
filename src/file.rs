@@ -545,9 +545,9 @@ fn path_template_to_path(
     let timestamp_string = match timezone {
         TimeZone::Local => {
             let local_timestamp = Local.from_utc_datetime(&date_time.naive_utc());
-            local_timestamp.format(&timestamp_template)
+            local_timestamp.format(timestamp_template)
         }
-        TimeZone::Utc => date_time.format(&timestamp_template),
+        TimeZone::Utc => date_time.format(timestamp_template),
     }
     .to_string();
     let path_string = path_template.replace("{timestamp}", &timestamp_string);

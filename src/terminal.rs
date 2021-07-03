@@ -103,12 +103,18 @@ impl Build for TerminalLoggerBuilder {
             }
             #[cfg(feature = "json")]
             Format::Json => match self.destination {
-                Destination::Stdout => self
-                    .common
-                    .build_with_drain(slog_json::Json::default(std::io::stdout())),
-                Destination::Stderr => self
-                    .common
-                    .build_with_drain(slog_json::Json::default(std::io::stderr())),
+                Destination::Stdout => self.common.build_with_drain(
+                    slog_json::Json::new(std::io::stdout())
+                        .set_flush(true)
+                        .add_default_keys()
+                        .build(),
+                ),
+                Destination::Stderr => self.common.build_with_drain(
+                    slog_json::Json::new(std::io::stderr())
+                        .set_flush(true)
+                        .add_default_keys()
+                        .build(),
+                ),
             },
         };
         Ok(logger)

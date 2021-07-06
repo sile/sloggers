@@ -1,15 +1,17 @@
 //! Terminal logger.
+use slog::{self, Drain, Logger};
+use slog_async::Async;
 use crate::build::BuilderCommon;
 use crate::misc;
 #[cfg(feature = "slog-kvfilter")]
 use crate::types::KVFilterParameters;
-use crate::types::{Format, OverflowStrategy, Severity, SourceLocation, TimeZone};
+use crate::types::{Format, OverflowStrategy, Severity, SourceLocation, ProcessID, TimeZone};
 use crate::{Build, Config, Result};
 use serde::{Deserialize, Serialize};
-use slog::Logger;
 use slog_term::{self, CompactFormat, FullFormat, PlainDecorator, TermDecorator};
 use std::fmt::Debug;
 use std::io;
+use misc::{build_with_options};
 
 /// A logger builder which build loggers that output log records to the terminal.
 ///
@@ -18,8 +20,13 @@ use std::io;
 pub struct TerminalLoggerBuilder {
     common: BuilderCommon,
     format: Format,
+    source_location: SourceLocation,
+    process_id: ProcessID,
     timezone: TimeZone,
     destination: Destination,
+    level: Severity,
+    channel_size: usize,
+    kvfilterparameters: Option<KVFilterParameters>,
 }
 impl TerminalLoggerBuilder {
     /// Makes a new `TerminalLoggerBuilder` instance.
@@ -27,8 +34,13 @@ impl TerminalLoggerBuilder {
         TerminalLoggerBuilder {
             common: BuilderCommon::default(),
             format: Format::default(),
+            source_location: SourceLocation::default(),
+            process_id: ProcessID::default(),
             timezone: TimeZone::default(),
             destination: Destination::default(),
+            level: Severity::default(),
+            channel_size: 1024,
+            kvfilterparameters: None,
         }
     }
 
@@ -47,6 +59,12 @@ impl TerminalLoggerBuilder {
     /// Sets the overflow strategy for the logger.
     pub fn overflow_strategy(&mut self, overflow_strategy: OverflowStrategy) -> &mut Self {
         self.common.overflow_strategy = overflow_strategy;
+        self
+    }
+
+    /// Sets whether process ID will be included in values
+    pub fn process_id(&mut self, process_id: ProcessID) -> &mut Self {
+        self.process_id = process_id;
         self
     }
 
@@ -81,6 +99,25 @@ impl TerminalLoggerBuilder {
     pub fn kvfilter(&mut self, parameters: KVFilterParameters) -> &mut Self {
         self.common.kvfilterparameters = Some(parameters);
         self
+    }
+
+    /// allows to build from a drain
+    pub fn build_with_drain<D>(&self, drain: D) -> Logger
+    where
+        D: Drain + Send + 'static,
+        D::Err: Debug,
+    {
+        // async inside, level and key value filters outside for speed
+        let drain = Async::new(drain.fuse())
+            .chan_size(self.channel_size)
+            .build()
+            .fuse();
+
+	    build_with_options(drain,
+	                       self.level,
+	                       &self.kvfilterparameters,
+	                       self.source_location,
+	                       self.process_id)
     }
 }
 impl Default for TerminalLoggerBuilder {
@@ -200,6 +237,10 @@ pub struct TerminalLoggerConfig {
     #[serde(default)]
     pub source_location: SourceLocation,
 
+    /// process ID
+    #[serde(default)]
+    pub process_id: ProcessID,
+
     /// Time Zone.
     #[serde(default)]
     pub timezone: TimeZone,
@@ -233,6 +274,7 @@ impl Config for TerminalLoggerConfig {
         builder.level(self.level);
         builder.format(self.format);
         builder.source_location(self.source_location);
+        builder.process_id(self.process_id);
         builder.timezone(self.timezone);
         builder.destination(self.destination);
         builder.channel_size(self.channel_size);

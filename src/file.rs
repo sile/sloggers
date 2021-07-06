@@ -3,13 +3,13 @@ use crate::build::BuilderCommon;
 use crate::misc;
 #[cfg(feature = "slog-kvfilter")]
 use crate::types::KVFilterParameters;
-use crate::types::{Format, OverflowStrategy, Severity, SourceLocation, TimeZone};
-use crate::{Build, Config, ErrorKind, Result};
+use crate::types::{Format, ProcessID, OverflowStrategy, Severity, SourceLocation, TimeZone};
 use chrono::{DateTime, Local, TimeZone as ChronoTimeZone, Utc};
 #[cfg(feature = "libflate")]
 use libflate::gzip::Encoder as GzipEncoder;
+use slog::{Drain, Logger};
+use slog_async::Async;
 use serde::{Deserialize, Serialize};
-use slog::Logger;
 use slog_term::{CompactFormat, FullFormat, PlainDecorator};
 use std::fmt::Debug;
 use std::fs::{self, File, OpenOptions};
@@ -20,6 +20,11 @@ use std::sync::mpsc;
 #[cfg(feature = "libflate")]
 use std::thread;
 use std::time::{Duration, Instant};
+use std::ops::Deref;
+use std::io::Result as ioResult;
+
+use misc::{build_with_options};
+use crate::{Build, Config, ErrorKind, Result};
 
 /// A logger builder which build loggers that write log records to the specified file.
 ///
@@ -28,8 +33,13 @@ use std::time::{Duration, Instant};
 pub struct FileLoggerBuilder {
     common: BuilderCommon,
     format: Format,
+    source_location: SourceLocation,
+    process_id: ProcessID,
     timezone: TimeZone,
+    level: Severity,
     appender: FileAppender,
+    channel_size: usize,
+    kvfilterparameters: Option<KVFilterParameters>,
 }
 
 impl FileLoggerBuilder {
@@ -41,8 +51,13 @@ impl FileLoggerBuilder {
         FileLoggerBuilder {
             common: BuilderCommon::default(),
             format: Format::default(),
+            source_location: SourceLocation::default(),
+            process_id: ProcessID::default(),
             timezone: TimeZone::default(),
+            level: Severity::default(),
             appender: FileAppender::new(path),
+            channel_size: 1024,
+            kvfilterparameters: None,
         }
     }
 
@@ -61,6 +76,12 @@ impl FileLoggerBuilder {
     /// Sets the overflow strategy for the logger.
     pub fn overflow_strategy(&mut self, overflow_strategy: OverflowStrategy) -> &mut Self {
         self.common.overflow_strategy = overflow_strategy;
+        self
+    }
+
+    /// Sets whether process ID will be included in values
+    pub fn process_id(&mut self, process_id: ProcessID) -> &mut Self {
+        self.process_id = process_id;
         self
     }
 
@@ -136,6 +157,27 @@ impl FileLoggerBuilder {
         self.appender.rotate_compress = compress;
         self
     }
+
+    /// builds the logger from a drain
+    pub fn build_with_drain<D>(&self, drain: D) -> Logger
+    where
+        D: Drain + Send + 'static,
+        D::Err: Debug,
+    {
+        // async inside, level and key value filters outside for speed
+        let drain = Async::new(drain.fuse())
+            .chan_size(self.channel_size)
+            .build()
+            .fuse();
+
+        build_with_options(
+            drain,
+            self.level,
+            &self.kvfilterparameters,
+            self.source_location,
+            self.process_id,
+        )
+    }
 }
 
 impl Build for FileLoggerBuilder {
@@ -165,10 +207,49 @@ impl Build for FileLoggerBuilder {
     }
 }
 
+/// Files on drop do not sync which cuts of tail-end of the logs. Encaps the type to make
+/// sure we properly fsync on close
+#[derive(Debug)]
+struct FSyncFile {
+	inner: File,
+}
+
+impl Deref for FSyncFile {
+	type Target = File;
+
+	fn deref(&self) -> &<Self as Deref>::Target {
+		&self.inner
+	}
+}
+
+impl FSyncFile {
+	pub fn new(f: File) -> FSyncFile {
+		FSyncFile {
+			inner: f
+		}
+	}
+}
+
+impl Write for FSyncFile {
+	fn write(&mut self, buf: &[u8]) -> ioResult<usize> {
+		self.inner.write(buf)
+	}
+
+	fn flush(&mut self) -> ioResult<()> {
+		self.inner.flush()
+	}
+}
+
+impl Drop for FSyncFile {
+	fn drop(&mut self) {
+		let _r = self.inner.sync_all(); // no further treatment on fail
+	}
+}
+
 #[derive(Debug)]
 struct FileAppender {
     path: PathBuf,
-    file: Option<BufWriter<File>>,
+    file: Option<BufWriter<FSyncFile>>,
     truncate: bool,
     written_size: u64,
     rotate_size: u64,
@@ -247,6 +328,7 @@ impl FileAppender {
                 .write(true)
                 .open(&self.path)?;
             self.written_size = file.metadata()?.len();
+	        let file = FSyncFile::new(file);
             self.file = Some(BufWriter::new(file));
         }
         Ok(())
@@ -424,6 +506,10 @@ pub struct FileLoggerConfig {
     #[serde(default)]
     pub source_location: SourceLocation,
 
+    /// process ID
+    #[serde(default)]
+    pub process_id: ProcessID,
+
     /// Time Zone.
     #[serde(default)]
     pub timezone: TimeZone,
@@ -505,6 +591,7 @@ impl Config for FileLoggerConfig {
         builder.level(self.level);
         builder.format(self.format);
         builder.source_location(self.source_location);
+        builder.process_id(self.process_id);
         builder.timezone(self.timezone);
         builder.overflow_strategy(self.overflow_strategy);
         builder.channel_size(self.channel_size);
@@ -525,6 +612,7 @@ impl Default for FileLoggerConfig {
             level: Severity::default(),
             format: Format::default(),
             source_location: SourceLocation::default(),
+            process_id: ProcessID::default(),
             overflow_strategy: OverflowStrategy::default(),
             timezone: TimeZone::default(),
             path: PathBuf::default(),

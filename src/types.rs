@@ -268,6 +268,43 @@ impl FromStr for SourceLocation {
     }
 }
 
+/// Process Identifier.
+///
+/// # Examples
+///
+/// The default value:
+///
+/// ```
+/// use sloggers::types::ProcessID;
+///
+/// assert_eq!(ProcessID::default(), ProcessID(false));
+#[allow(missing_docs)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+
+pub struct ProcessID(pub bool);
+
+impl Default for ProcessID {
+    fn default() -> Self {
+	    ProcessID(false)
+    }
+}
+
+impl FromStr for ProcessID {
+    type Err = Error;
+    fn from_str(s: &str) -> Result<Self, Error> {
+        match s {
+            "false" => Ok(ProcessID(false)),
+            "true" => Ok(ProcessID(true)),
+            _ => track_panic!(
+                ErrorKind::Invalid,
+                "Undefined process identifier: {:?}",
+                s
+            ),
+        }
+    }
+}
+
 /// Overflow Strategy.
 ///
 /// # Examples
@@ -279,10 +316,8 @@ impl FromStr for SourceLocation {
 ///
 /// assert_eq!(OverflowStrategy::default(), OverflowStrategy::DropAndReport);
 /// ```
-#[allow(missing_docs)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
 #[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OverflowStrategy {
     DropAndReport,
     Drop,

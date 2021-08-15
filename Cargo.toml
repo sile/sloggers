@@ -33,6 +33,7 @@ regex="1"
 
 [dev-dependencies]
 clap = "2"
+log = "0.4"
 serdeconv = "0.4"
 tempfile = "3"
 

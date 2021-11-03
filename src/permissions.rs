@@ -1,8 +1,6 @@
 //! Cross platform functions to restrict file permissions when using the file logger.
-#[cfg(unix)]
 use std::fs::File;
 use std::io;
-#[cfg(windows)]
 use std::path::Path;
 #[cfg(windows)]
 use winapi::um::winnt::{FILE_GENERIC_READ, FILE_GENERIC_WRITE, STANDARD_RIGHTS_ALL};
@@ -28,7 +26,7 @@ const OWNER_ACL_ENTRY_MASK: u32 = FILE_GENERIC_READ | FILE_GENERIC_WRITE | STAND
 ///
 /// This ensures the log files are not world-readable.
 #[cfg(unix)]
-pub fn restrict_file_permissions(file: File) -> io::Result<File> {
+pub fn restrict_file_permissions<P: AsRef<Path>>(_path: P, file: File) -> io::Result<File> {
     use std::os::unix::fs::PermissionsExt;
     let mut perm = file.metadata()?.permissions();
     perm.set_mode(0o600);
@@ -40,9 +38,9 @@ pub fn restrict_file_permissions(file: File) -> io::Result<File> {
 /// Function to set the access control lists (ACLs) of the log files to only include the owner.
 /// This is equivalent to a umask of `600` on `unix` systems.
 ///
-/// This ensures the log fiels are not world-readable.
+/// This ensures the log files are not world-readable.
 #[cfg(windows)]
-pub fn restrict_file_permissions<P: AsRef<Path>>(path: P) -> io::Result<()> {
+pub fn restrict_file_permissions<P: AsRef<Path>>(path: P, file: File) -> io::Result<File> {
     use winapi::um::winnt::PSID;
     use windows_acl::acl::{AceType, ACL};
     use windows_acl::helper::sid_to_string;
@@ -107,5 +105,5 @@ pub fn restrict_file_permissions<P: AsRef<Path>>(path: P) -> io::Result<()> {
             }
         }
     }
-    Ok(())
+    Ok(file)
 }

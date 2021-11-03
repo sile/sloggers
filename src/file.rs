@@ -260,27 +260,13 @@ impl FileAppender {
             // handle, we get a Permission denied on Windows. Release the handle.
             self.file = None;
 
-            #[cfg(unix)]
             let mut file = file_builder
                 .append(!self.truncate)
                 .write(true)
                 .open(&self.path)?;
 
-            #[cfg(windows)]
-            let file = file_builder
-                .append(!self.truncate)
-                .write(true)
-                .open(&self.path)?;
-
             if self.restrict_permissions {
-                #[cfg(unix)]
-                {
-                    file = restrict_file_permissions(file)?;
-                }
-                #[cfg(windows)]
-                {
-                    restrict_file_permissions(&self.path)?;
-                }
+                file = restrict_file_permissions(&self.path, file)?;
             }
             self.written_size = file.metadata()?.len();
             self.file = Some(BufWriter::new(file));

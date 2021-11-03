@@ -107,3 +107,11 @@ pub fn restrict_file_permissions<P: AsRef<Path>>(path: P, file: File) -> io::Res
     }
     Ok(file)
 }
+
+#[cfg(not(any(unix, windows)))]
+pub fn restrict_file_permissions<P: AsRef<Path>>(_path: P, _file: File) -> io::Result<File> {
+    Err(io::Error::new(
+        io::ErrorKind::Other,
+        "`restrict_permissions` feature is only available on Unix or Windows",
+    ))
+}

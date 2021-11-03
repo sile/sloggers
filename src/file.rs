@@ -1,6 +1,7 @@
 //! File logger.
 use crate::build::BuilderCommon;
 use crate::misc;
+use crate::permissions::restrict_file_permissions;
 #[cfg(feature = "slog-kvfilter")]
 use crate::types::KVFilterParameters;
 use crate::types::{Format, OverflowStrategy, Severity, SourceLocation, TimeZone};
@@ -136,6 +137,19 @@ impl FileLoggerBuilder {
         self.appender.rotate_compress = compress;
         self
     }
+
+    /// Sets whether the log files should have restricted permissions.
+    ///
+    /// If `true` is specified, new log files will be created with the `600` octal permission
+    /// on unix systems.
+    /// On Windows systems, new log files will have an ACL which just contains the SID of
+    /// the owner.
+    ///
+    /// The default value is `false`.
+    pub fn restrict_permissions(&mut self, restrict: bool) -> &mut Self {
+        self.appender.restrict_permissions = restrict;
+        self
+    }
 }
 
 impl Build for FileLoggerBuilder {
@@ -179,6 +193,7 @@ struct FileAppender {
     wait_compression: Option<mpsc::Receiver<io::Result<()>>>,
     next_reopen_check: Instant,
     reopen_check_interval: Duration,
+    restrict_permissions: bool,
 }
 
 impl Clone for FileAppender {
@@ -196,6 +211,7 @@ impl Clone for FileAppender {
             wait_compression: None,
             next_reopen_check: Instant::now(),
             reopen_check_interval: self.reopen_check_interval,
+            restrict_permissions: self.restrict_permissions,
         }
     }
 }
@@ -215,6 +231,7 @@ impl FileAppender {
             wait_compression: None,
             next_reopen_check: Instant::now(),
             reopen_check_interval: Duration::from_millis(1000),
+            restrict_permissions: false,
         }
     }
 
@@ -242,10 +259,15 @@ impl FileAppender {
             // If the old file was externally deleted and we attempt to open a new one before releasing the old
             // handle, we get a Permission denied on Windows. Release the handle.
             self.file = None;
-            let file = file_builder
+
+            let mut file = file_builder
                 .append(!self.truncate)
                 .write(true)
                 .open(&self.path)?;
+
+            if self.restrict_permissions {
+                file = restrict_file_permissions(&self.path, file)?;
+            }
             self.written_size = file.metadata()?.len();
             self.file = Some(BufWriter::new(file));
         }
@@ -485,6 +507,14 @@ pub struct FileLoggerConfig {
     /// The default value is `drop_and_report`.
     #[serde(default)]
     pub overflow_strategy: OverflowStrategy,
+
+    /// Whether to restrict the permissions of log files.
+    ///
+    /// For details, see the documentation of [`restict_permissions`].
+    ///
+    /// [`restrict_permissions`]: ./struct.FileLoggerBuilder.html#method.restrict_permissions
+    #[serde(default)]
+    pub restrict_permissions: bool,
 }
 
 impl FileLoggerConfig {
@@ -512,6 +542,7 @@ impl Config for FileLoggerConfig {
         builder.rotate_keep(self.rotate_keep);
         #[cfg(feature = "libflate")]
         builder.rotate_compress(self.rotate_compress);
+        builder.restrict_permissions(self.restrict_permissions);
         if self.truncate {
             builder.truncate();
         }
@@ -535,6 +566,7 @@ impl Default for FileLoggerConfig {
             rotate_keep: default_rotate_keep(),
             #[cfg(feature = "libflate")]
             rotate_compress: false,
+            restrict_permissions: false,
         }
     }
 }

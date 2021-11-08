@@ -337,10 +337,12 @@ impl FileAppender {
                 if self.rotate_compress {
                     let (plain_path, temp_gz_path) = self.rotated_paths_for_compression()?;
                     let (tx, rx) = mpsc::channel();
+                    let restrict_perms = self.restrict_permissions;
 
                     fs::rename(&self.path, &plain_path)?;
                     thread::spawn(move || {
-                        let result = Self::compress(plain_path, temp_gz_path, rotated_path);
+                        let result =
+                            Self::compress(plain_path, temp_gz_path, rotated_path, restrict_perms);
                         let _ = tx.send(result);
                     });
 
@@ -392,11 +394,20 @@ impl FileAppender {
         ))
     }
     #[cfg(feature = "libflate")]
-    fn compress(input_path: PathBuf, temp_path: PathBuf, output_path: PathBuf) -> io::Result<()> {
+    fn compress(
+        input_path: PathBuf,
+        temp_path: PathBuf,
+        output_path: PathBuf,
+        restrict_perms: bool,
+    ) -> io::Result<()> {
         let mut input = File::open(&input_path)?;
-        let mut temp = GzipEncoder::new(File::create(&temp_path)?)?;
-        io::copy(&mut input, &mut temp)?;
-        temp.finish().into_result()?;
+        let mut temp = File::create(&temp_path)?;
+        if restrict_perms {
+            temp = restrict_file_permissions(&temp_path, temp)?;
+        }
+        let mut output = GzipEncoder::new(temp)?;
+        io::copy(&mut input, &mut output)?;
+        output.finish().into_result()?;
 
         fs::rename(temp_path, output_path)?;
         fs::remove_file(input_path)?;

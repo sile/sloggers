@@ -350,21 +350,16 @@ fn test_default_msg_format() {
 }
 
 /// Enumeration of built-in `MsgFormat`s, for use with serde.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Default, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[non_exhaustive]
 #[serde(rename_all = "snake_case")]
 pub enum MsgFormatConfig {
     /// [`DefaultMsgFormat`](struct.DefaultMsgFormat.html).
+    #[default]
     Default,
 
     /// [`BasicMsgFormat`](struct.BasicMsgFormat.html).
     Basic,
-}
-
-impl Default for MsgFormatConfig {
-    fn default() -> Self {
-        MsgFormatConfig::Default
-    }
 }
 
 impl From<MsgFormatConfig> for Arc<dyn MsgFormat> {

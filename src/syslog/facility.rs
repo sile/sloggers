@@ -13,7 +13,7 @@ use std::str::FromStr;
 /// `enum` are available on all platforms, and variants not present on the
 /// target platform will be mapped to a reasonable alternative.
 #[allow(missing_docs)]
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[derive(Default, Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[non_exhaustive]
 #[serde(rename_all = "lowercase")]
 pub enum Facility {
@@ -110,6 +110,7 @@ pub enum Facility {
     Security,
 
     Syslog,
+    #[default]
     User,
     Uucp,
 }
@@ -149,12 +150,6 @@ impl Facility {
             Facility::User => "user",
             Facility::Uucp => "uucp",
         }
-    }
-}
-
-impl Default for Facility {
-    fn default() -> Self {
-        Facility::User
     }
 }
 

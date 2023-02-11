@@ -28,11 +28,14 @@ use std::str::FromStr;
 ///
 /// See [slog's documentation](https://docs.rs/slog/2.2.3/slog/#notable-details) for more details.
 #[allow(missing_docs)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(
+    Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
+)]
 #[serde(rename_all = "lowercase")]
 pub enum Severity {
     Trace,
     Debug,
+    #[default]
     Info,
     Warning,
     Error,
@@ -54,11 +57,6 @@ impl Severity {
     /// Sets `LevelFilter` to `drain`.
     pub fn set_level_filter<D: Drain>(self, drain: D) -> LevelFilter<D> {
         LevelFilter::new(drain, self.as_level())
-    }
-}
-impl Default for Severity {
-    fn default() -> Self {
-        Severity::Info
     }
 }
 impl FromStr for Severity {
@@ -159,11 +157,12 @@ impl KVFilterParameters {
 ///
 /// assert_eq!(Format::default(), Format::Full);
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 #[non_exhaustive]
 pub enum Format {
     /// Full format.
+    #[default]
     Full,
 
     /// Compact format.
@@ -172,11 +171,6 @@ pub enum Format {
     /// JSON format.
     #[cfg(feature = "json")]
     Json,
-}
-impl Default for Format {
-    fn default() -> Self {
-        Format::Full
-    }
 }
 impl FromStr for Format {
     type Err = Error;
@@ -203,16 +197,12 @@ impl FromStr for Format {
 /// assert_eq!(TimeZone::default(), TimeZone::Local);
 /// ```
 #[allow(missing_docs)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum TimeZone {
     Utc,
+    #[default]
     Local,
-}
-impl Default for TimeZone {
-    fn default() -> Self {
-        TimeZone::Local
-    }
 }
 impl FromStr for TimeZone {
     type Err = Error;
@@ -237,19 +227,15 @@ impl FromStr for TimeZone {
 /// assert_eq!(SourceLocation::default(), SourceLocation::ModuleAndLine);
 /// ```
 #[allow(missing_docs)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum SourceLocation {
     None,
+    #[default]
     ModuleAndLine,
     FileAndLine,
     LocalFileAndLine,
-}
-impl Default for SourceLocation {
-    fn default() -> Self {
-        SourceLocation::ModuleAndLine
-    }
 }
 impl FromStr for SourceLocation {
     type Err = Error;
@@ -280,18 +266,14 @@ impl FromStr for SourceLocation {
 /// assert_eq!(OverflowStrategy::default(), OverflowStrategy::DropAndReport);
 /// ```
 #[allow(missing_docs)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum OverflowStrategy {
+    #[default]
     DropAndReport,
     Drop,
     Block,
-}
-impl Default for OverflowStrategy {
-    fn default() -> Self {
-        OverflowStrategy::DropAndReport
-    }
 }
 impl FromStr for OverflowStrategy {
     type Err = Error;

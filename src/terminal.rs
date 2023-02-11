@@ -132,19 +132,15 @@ impl Build for TerminalLoggerBuilder {
 ///
 /// assert_eq!(Destination::default(), Destination::Stderr);
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Destination {
     /// Standard output.
     Stdout,
 
     /// Standard error.
+    #[default]
     Stderr,
-}
-impl Default for Destination {
-    fn default() -> Self {
-        Destination::Stderr
-    }
 }
 impl Destination {
     fn to_decorator(self) -> Decorator {

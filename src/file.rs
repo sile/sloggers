@@ -542,7 +542,7 @@ impl Config for FileLoggerConfig {
         let path_template = self.path.to_str().ok_or(ErrorKind::Invalid)?;
         let path =
             path_template_to_path(path_template, &self.timestamp_template, self.timezone, now);
-        let mut builder = FileLoggerBuilder::new(&path);
+        let mut builder = FileLoggerBuilder::new(path);
         builder.level(self.level);
         builder.format(self.format);
         builder.source_location(self.source_location);

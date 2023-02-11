@@ -431,7 +431,7 @@ pub struct UnknownFacilityError {
 impl UnknownFacilityError {
     /// The unrecognized facility name.
     pub fn name(&self) -> &str {
-        &*self.name
+        &self.name
     }
 }
 

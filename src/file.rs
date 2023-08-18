@@ -737,7 +737,7 @@ mod tests {
             &path_template,
             "%Y%m%d_%H%M",
             TimeZone::Utc, // Local is difficult to test, omitting :(
-            Utc.from_utc_datetime(&NaiveDateTime::from_timestamp(1537265991, 0)),
+            Utc.from_utc_datetime(&NaiveDateTime::from_timestamp_opt(1537265991, 0).unwrap()),
         );
         let expected = dir.path().join("foo_20180918_1019.log");
         assert_eq!(expected, actual);

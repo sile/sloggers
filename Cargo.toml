@@ -19,7 +19,7 @@ json = ["slog-json"]
 
 [dependencies]
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
-libflate = {version = "1", optional = true}
+libflate = {version = "2", optional = true}
 serde = {version = "1", features = ["derive"]}
 slog = "2"
 slog-async = "2"

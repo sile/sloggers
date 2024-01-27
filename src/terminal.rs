@@ -1,12 +1,12 @@
 //! Terminal logger.
 use crate::build::BuilderCommon;
-use crate::misc;
 #[cfg(feature = "slog-kvfilter")]
 use crate::types::KVFilterParameters;
 use crate::types::{Format, OverflowStrategy, Severity, SourceLocation, TimeZone};
+use crate::{misc, BuildWithCustomFormat};
 use crate::{Build, Config, Result};
 use serde::{Deserialize, Serialize};
-use slog::Logger;
+use slog::{Drain, Logger};
 use slog_term::{self, CompactFormat, FullFormat, PlainDecorator, TermDecorator};
 use std::fmt::Debug;
 use std::io;
@@ -118,6 +118,37 @@ impl Build for TerminalLoggerBuilder {
             },
         };
         Ok(logger)
+    }
+}
+impl BuildWithCustomFormat for TerminalLoggerBuilder {
+    type Decorator = TerminalLoggerDecorator;
+
+    fn build_with_custom_format<F, D>(&self, f: F) -> Result<Logger>
+    where
+        F: FnOnce(Self::Decorator) -> Result<D>,
+        D: Drain + Send + 'static,
+        D::Err: Debug,
+    {
+        let decorator = TerminalLoggerDecorator(self.destination.to_decorator());
+        let drain = track!(f(decorator))?;
+        Ok(self.common.build_with_drain(drain))
+    }
+}
+
+/// [`slog_term::Decorator`] implementation for [`TerminalLoggerBuilder`].
+pub struct TerminalLoggerDecorator(Decorator);
+
+impl slog_term::Decorator for TerminalLoggerDecorator {
+    fn with_record<F>(
+        &self,
+        record: &slog::Record,
+        logger_values: &slog::OwnedKVList,
+        f: F,
+    ) -> io::Result<()>
+    where
+        F: FnOnce(&mut dyn slog_term::RecordDecorator) -> io::Result<()>,
+    {
+        self.0.with_record(record, logger_values, f)
     }
 }
 

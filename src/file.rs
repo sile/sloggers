@@ -1,16 +1,16 @@
 //! File logger.
 use crate::build::BuilderCommon;
-use crate::misc;
 use crate::permissions::restrict_file_permissions;
 #[cfg(feature = "slog-kvfilter")]
 use crate::types::KVFilterParameters;
 use crate::types::{Format, OverflowStrategy, Severity, SourceLocation, TimeZone};
+use crate::{misc, BuildWithCustomFormat};
 use crate::{Build, Config, ErrorKind, Result};
 use chrono::{DateTime, Local, TimeZone as ChronoTimeZone, Utc};
 #[cfg(feature = "libflate")]
 use libflate::gzip::Encoder as GzipEncoder;
 use serde::{Deserialize, Serialize};
-use slog::Logger;
+use slog::{Drain, Logger};
 use slog_term::{CompactFormat, FullFormat, PlainDecorator};
 use std::fmt::Debug;
 use std::fs::{self, File, OpenOptions};
@@ -176,6 +176,37 @@ impl Build for FileLoggerBuilder {
             }
         };
         Ok(logger)
+    }
+}
+impl BuildWithCustomFormat for FileLoggerBuilder {
+    type Decorator = FileLoggerDecorator;
+
+    fn build_with_custom_format<F, D>(&self, f: F) -> Result<Logger>
+    where
+        F: FnOnce(Self::Decorator) -> Result<D>,
+        D: Drain + Send + 'static,
+        D::Err: Debug,
+    {
+        let decorator = FileLoggerDecorator(PlainDecorator::new(self.appender.clone()));
+        let drain = track!(f(decorator))?;
+        Ok(self.common.build_with_drain(drain))
+    }
+}
+
+/// [`slog_term::Decorator`] implementation for [`FileLoggerBuilder`].
+pub struct FileLoggerDecorator(PlainDecorator<FileAppender>);
+
+impl slog_term::Decorator for FileLoggerDecorator {
+    fn with_record<F>(
+        &self,
+        record: &slog::Record,
+        logger_values: &slog::OwnedKVList,
+        f: F,
+    ) -> io::Result<()>
+    where
+        F: FnOnce(&mut dyn slog_term::RecordDecorator) -> io::Result<()>,
+    {
+        self.0.with_record(record, logger_values, f)
     }
 }
 

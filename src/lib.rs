@@ -48,7 +48,7 @@ extern crate slog;
 #[macro_use]
 extern crate trackable;
 
-pub use build::{Build, LoggerBuilder};
+pub use build::{Build, BuildWithCustomFormat, LoggerBuilder};
 pub use config::{Config, LoggerConfig};
 pub use error::{Error, ErrorKind};
 pub use misc::set_stdlog_logger;

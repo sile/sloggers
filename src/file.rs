@@ -179,7 +179,7 @@ impl Build for FileLoggerBuilder {
     }
 }
 impl BuildWithCustomFormat for FileLoggerBuilder {
-    type Decorator = PlainDecorator<FileAppender>;
+    type Decorator = FileLoggerDecorator;
 
     fn build_with_custom_format<F, D>(&self, f: F) -> Result<Logger>
     where
@@ -187,14 +187,31 @@ impl BuildWithCustomFormat for FileLoggerBuilder {
         D: Drain + Send + 'static,
         D::Err: Debug,
     {
-        let decorator = PlainDecorator::new(self.appender.clone());
+        let decorator = FileLoggerDecorator(PlainDecorator::new(self.appender.clone()));
         let drain = track!(f(decorator))?;
         Ok(self.common.build_with_drain(drain))
     }
 }
 
+/// [`slog_term::Decorator`] implementation for [`FileLoggerBuilder`].
+pub struct FileLoggerDecorator(PlainDecorator<FileAppender>);
+
+impl slog_term::Decorator for FileLoggerDecorator {
+    fn with_record<F>(
+        &self,
+        record: &slog::Record,
+        logger_values: &slog::OwnedKVList,
+        f: F,
+    ) -> io::Result<()>
+    where
+        F: FnOnce(&mut dyn slog_term::RecordDecorator) -> io::Result<()>,
+    {
+        self.0.with_record(record, logger_values, f)
+    }
+}
+
 #[derive(Debug)]
-pub struct FileAppender {
+struct FileAppender {
     path: PathBuf,
     file: Option<BufWriter<File>>,
     truncate: bool,

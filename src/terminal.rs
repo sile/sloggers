@@ -121,7 +121,7 @@ impl Build for TerminalLoggerBuilder {
     }
 }
 impl BuildWithCustomFormat for TerminalLoggerBuilder {
-    type Decorator = Decorator;
+    type Decorator = TerminalLoggerDecorator;
 
     fn build_with_custom_format<F, D>(&self, f: F) -> Result<Logger>
     where
@@ -129,9 +129,26 @@ impl BuildWithCustomFormat for TerminalLoggerBuilder {
         D: Drain + Send + 'static,
         D::Err: Debug,
     {
-        let decorator = self.destination.to_decorator();
+        let decorator = TerminalLoggerDecorator(self.destination.to_decorator());
         let drain = track!(f(decorator))?;
         Ok(self.common.build_with_drain(drain))
+    }
+}
+
+/// [`slog_term::Decorator`] implementation for [`TerminalLoggerBuilder`].
+pub struct TerminalLoggerDecorator(Decorator);
+
+impl slog_term::Decorator for TerminalLoggerDecorator {
+    fn with_record<F>(
+        &self,
+        record: &slog::Record,
+        logger_values: &slog::OwnedKVList,
+        f: F,
+    ) -> io::Result<()>
+    where
+        F: FnOnce(&mut dyn slog_term::RecordDecorator) -> io::Result<()>,
+    {
+        self.0.with_record(record, logger_values, f)
     }
 }
 
@@ -171,7 +188,7 @@ impl Destination {
     }
 }
 
-pub enum Decorator {
+enum Decorator {
     Term(TermDecorator),
     PlainStdout(PlainDecorator<io::Stdout>),
     PlainStderr(PlainDecorator<io::Stderr>),

@@ -1,36 +1,36 @@
 //! File logger.
+use crate::build::BuilderCommon;
+use crate::permissions::restrict_file_permissions;
+#[cfg(feature = "slog-kvfilter")]
+use crate::types::KVFilterParameters;
+use crate::types::{Format, OverflowStrategy, Severity, SourceLocation, TimeZone};
+use crate::{misc, BuildWithCustomFormat};
+use crate::{Build, Config, ErrorKind, Result};
 use chrono::{DateTime, Local, TimeZone as ChronoTimeZone, Utc};
+#[cfg(feature = "libflate")]
 use libflate::gzip::Encoder as GzipEncoder;
-use slog::{Drain, FnValue, Logger};
-use slog_async::Async;
-use slog_kvfilter::KVFilter;
+use serde::{Deserialize, Serialize};
+use slog::{Drain, Logger};
 use slog_term::{CompactFormat, FullFormat, PlainDecorator};
 use std::fmt::Debug;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufWriter, Write};
 use std::path::{Path, PathBuf};
+#[cfg(feature = "libflate")]
 use std::sync::mpsc;
+#[cfg(feature = "libflate")]
 use std::thread;
 use std::time::{Duration, Instant};
-
-use misc::{module_and_line, timezone_to_timestamp_fn};
-use types::KVFilterParameters;
-use types::{Format, OverflowStrategy, Severity, SourceLocation, TimeZone};
-use {Build, BuildWithCustomFormat, Config, ErrorKind, Result};
 
 /// A logger builder which build loggers that write log records to the specified file.
 ///
 /// The resulting logger will work asynchronously (the default channel size is 1024).
 #[derive(Debug)]
 pub struct FileLoggerBuilder {
+    common: BuilderCommon,
     format: Format,
-    source_location: SourceLocation,
-    overflow_strategy: OverflowStrategy,
     timezone: TimeZone,
-    level: Severity,
     appender: FileAppender,
-    channel_size: usize,
-    kvfilterparameters: Option<KVFilterParameters>,
 }
 
 impl FileLoggerBuilder {
@@ -40,14 +40,10 @@ impl FileLoggerBuilder {
     /// the output destination of the log records.
     pub fn new<P: AsRef<Path>>(path: P) -> Self {
         FileLoggerBuilder {
+            common: BuilderCommon::default(),
             format: Format::default(),
-            source_location: SourceLocation::default(),
-            overflow_strategy: OverflowStrategy::default(),
             timezone: TimeZone::default(),
-            level: Severity::default(),
             appender: FileAppender::new(path),
-            channel_size: 1024,
-            kvfilterparameters: None,
         }
     }
 
@@ -59,13 +55,13 @@ impl FileLoggerBuilder {
 
     /// Sets the source code location type this logger will use.
     pub fn source_location(&mut self, source_location: SourceLocation) -> &mut Self {
-        self.source_location = source_location;
+        self.common.source_location = source_location;
         self
     }
 
     /// Sets the overflow strategy for the logger.
     pub fn overflow_strategy(&mut self, overflow_strategy: OverflowStrategy) -> &mut Self {
-        self.overflow_strategy = overflow_strategy;
+        self.common.overflow_strategy = overflow_strategy;
         self
     }
 
@@ -77,21 +73,22 @@ impl FileLoggerBuilder {
 
     /// Sets the log level of this logger.
     pub fn level(&mut self, severity: Severity) -> &mut Self {
-        self.level = severity;
+        self.common.level = severity;
         self
     }
 
     /// Sets the size of the asynchronous channel of this logger.
     pub fn channel_size(&mut self, channel_size: usize) -> &mut Self {
-        self.channel_size = channel_size;
+        self.common.channel_size = channel_size;
         self
     }
 
     /// Sets [`KVFilter`].
     ///
     /// [`KVFilter`]: https://docs.rs/slog-kvfilter/0.6/slog_kvfilter/struct.KVFilter.html
+    #[cfg(feature = "slog-kvfilter")]
     pub fn kvfilter(&mut self, parameters: KVFilterParameters) -> &mut Self {
-        self.kvfilterparameters = Some(parameters);
+        self.common.kvfilterparameters = Some(parameters);
         self
     }
 
@@ -135,63 +132,47 @@ impl FileLoggerBuilder {
     /// the suffix ".gz" will be appended to those file names.
     ///
     /// The default value is `false`.
+    #[cfg(feature = "libflate")]
     pub fn rotate_compress(&mut self, compress: bool) -> &mut Self {
         self.appender.rotate_compress = compress;
         self
     }
 
-    fn build_with_drain<D>(&self, drain: D) -> Logger
-    where
-        D: Drain + Send + 'static,
-        D::Err: Debug,
-    {
-        // async inside, level and key value filters outside for speed
-        let drain = Async::new(drain.fuse())
-            .chan_size(self.channel_size)
-            .overflow_strategy(self.overflow_strategy.to_async_type())
-            .build()
-            .fuse();
-
-        if let Some(ref p) = self.kvfilterparameters {
-            let kvdrain = KVFilter::new(drain, p.severity.as_level())
-                .always_suppress_any(p.always_suppress_any.clone())
-                .only_pass_any_on_all_keys(p.only_pass_any_on_all_keys.clone())
-                .always_suppress_on_regex(p.always_suppress_on_regex.clone())
-                .only_pass_on_regex(p.only_pass_on_regex.clone());
-
-            let drain = self.level.set_level_filter(kvdrain.fuse());
-
-            match self.source_location {
-                SourceLocation::None => Logger::root(drain.fuse(), o!()),
-                SourceLocation::ModuleAndLine => {
-                    Logger::root(drain.fuse(), o!("module" => FnValue(module_and_line)))
-                }
-            }
-        } else {
-            let drain = self.level.set_level_filter(drain.fuse());
-
-            match self.source_location {
-                SourceLocation::None => Logger::root(drain.fuse(), o!()),
-                SourceLocation::ModuleAndLine => {
-                    Logger::root(drain.fuse(), o!("module" => FnValue(module_and_line)))
-                }
-            }
-        }
+    /// Sets whether the log files should have restricted permissions.
+    ///
+    /// If `true` is specified, new log files will be created with the `600` octal permission
+    /// on unix systems.
+    /// On Windows systems, new log files will have an ACL which just contains the SID of
+    /// the owner.
+    ///
+    /// The default value is `false`.
+    pub fn restrict_permissions(&mut self, restrict: bool) -> &mut Self {
+        self.appender.restrict_permissions = restrict;
+        self
     }
 }
 
 impl Build for FileLoggerBuilder {
     fn build(&self) -> Result<Logger> {
-        let decorator = PlainDecorator::new(self.appender.clone());
-        let timestamp = timezone_to_timestamp_fn(self.timezone);
+        let timestamp = misc::timezone_to_timestamp_fn(self.timezone);
         let logger = match self.format {
             Format::Full => {
+                let decorator = PlainDecorator::new(self.appender.clone());
                 let format = FullFormat::new(decorator).use_custom_timestamp(timestamp);
-                self.build_with_drain(format.build())
+                self.common.build_with_drain(format.build())
             }
             Format::Compact => {
+                let decorator = PlainDecorator::new(self.appender.clone());
                 let format = CompactFormat::new(decorator).use_custom_timestamp(timestamp);
-                self.build_with_drain(format.build())
+                self.common.build_with_drain(format.build())
+            }
+            #[cfg(feature = "json")]
+            Format::Json => {
+                let drain = slog_json::Json::new(self.appender.clone())
+                    .set_flush(true)
+                    .add_default_keys()
+                    .build();
+                self.common.build_with_drain(drain)
             }
         };
         Ok(logger)
@@ -208,7 +189,7 @@ impl BuildWithCustomFormat for FileLoggerBuilder {
     {
         let decorator = PlainDecorator::new(self.appender.clone());
         let drain = track!(f(decorator))?;
-        Ok(self.build_with_drain(drain))
+        Ok(self.common.build_with_drain(drain))
     }
 }
 
@@ -220,10 +201,13 @@ pub struct FileAppender {
     written_size: u64,
     rotate_size: u64,
     rotate_keep: usize,
+    #[cfg(feature = "libflate")]
     rotate_compress: bool,
+    #[cfg(feature = "libflate")]
     wait_compression: Option<mpsc::Receiver<io::Result<()>>>,
     next_reopen_check: Instant,
     reopen_check_interval: Duration,
+    restrict_permissions: bool,
 }
 
 impl Clone for FileAppender {
@@ -235,10 +219,13 @@ impl Clone for FileAppender {
             written_size: 0,
             rotate_size: self.rotate_size,
             rotate_keep: self.rotate_keep,
+            #[cfg(feature = "libflate")]
             rotate_compress: self.rotate_compress,
+            #[cfg(feature = "libflate")]
             wait_compression: None,
             next_reopen_check: Instant::now(),
             reopen_check_interval: self.reopen_check_interval,
+            restrict_permissions: self.restrict_permissions,
         }
     }
 }
@@ -252,10 +239,13 @@ impl FileAppender {
             written_size: 0,
             rotate_size: default_rotate_size(),
             rotate_keep: default_rotate_keep(),
+            #[cfg(feature = "libflate")]
             rotate_compress: false,
+            #[cfg(feature = "libflate")]
             wait_compression: None,
             next_reopen_check: Instant::now(),
             reopen_check_interval: Duration::from_millis(1000),
+            restrict_permissions: false,
         }
     }
 
@@ -283,10 +273,15 @@ impl FileAppender {
             // If the old file was externally deleted and we attempt to open a new one before releasing the old
             // handle, we get a Permission denied on Windows. Release the handle.
             self.file = None;
-            let file = file_builder
+
+            let mut file = file_builder
                 .append(!self.truncate)
                 .write(true)
                 .open(&self.path)?;
+
+            if self.restrict_permissions {
+                file = restrict_file_permissions(&self.path, file)?;
+            }
             self.written_size = file.metadata()?.len();
             self.file = Some(BufWriter::new(file));
         }
@@ -294,27 +289,54 @@ impl FileAppender {
     }
 
     fn rotate(&mut self) -> io::Result<()> {
-        if let Some(ref mut rx) = self.wait_compression {
-            use std::sync::mpsc::TryRecvError;
-            match rx.try_recv() {
-                Err(TryRecvError::Empty) => {
-                    // The previous compression is in progress
-                    return Ok(());
-                }
-                Err(TryRecvError::Disconnected) => {
-                    let e =
-                        io::Error::new(io::ErrorKind::Other, "Log file compression thread aborted");
-                    return Err(e);
-                }
-                Ok(result) => {
-                    result?;
+        #[cfg(feature = "libflate")]
+        {
+            if let Some(ref mut rx) = self.wait_compression {
+                use std::sync::mpsc::TryRecvError;
+                match rx.try_recv() {
+                    Err(TryRecvError::Empty) => {
+                        // The previous compression is in progress
+                        return Ok(());
+                    }
+                    Err(TryRecvError::Disconnected) => {
+                        let e = io::Error::new(
+                            io::ErrorKind::Other,
+                            "Log file compression thread aborted",
+                        );
+                        return Err(e);
+                    }
+                    Ok(result) => {
+                        result?;
+                    }
                 }
             }
+            self.wait_compression = None;
         }
-        self.wait_compression = None;
 
         let _ = self.file.take();
 
+        #[cfg(windows)]
+        {
+            if let Err(err) = self.rotate_old_files() {
+                const ERROR_SHARING_VIOLATION: i32 = 32;
+
+                // To avoid the problem reported by https://github.com/sile/sloggers/issues/43,
+                // we ignore the error if its code is 32.
+                if err.raw_os_error() != Some(ERROR_SHARING_VIOLATION) {
+                    return Err(err);
+                }
+            }
+        }
+        #[cfg(not(windows))]
+        self.rotate_old_files()?;
+
+        self.written_size = 0;
+        self.next_reopen_check = Instant::now();
+        self.reopen_if_needed()?;
+
+        Ok(())
+    }
+    fn rotate_old_files(&mut self) -> io::Result<()> {
         for i in (1..=self.rotate_keep).rev() {
             let from = self.rotated_path(i)?;
             let to = self.rotated_path(i + 1)?;
@@ -324,30 +346,33 @@ impl FileAppender {
         }
         if self.path.exists() {
             let rotated_path = self.rotated_path(1)?;
-            if self.rotate_compress {
-                let (plain_path, temp_gz_path) = self.rotated_paths_for_compression()?;
-                let (tx, rx) = mpsc::channel();
+            #[cfg(feature = "libflate")]
+            {
+                if self.rotate_compress {
+                    let (plain_path, temp_gz_path) = self.rotated_paths_for_compression()?;
+                    let (tx, rx) = mpsc::channel();
+                    let restrict_perms = self.restrict_permissions;
 
-                fs::rename(&self.path, &plain_path)?;
-                thread::spawn(move || {
-                    let result = Self::compress(plain_path, temp_gz_path, rotated_path);
-                    let _ = tx.send(result);
-                });
+                    fs::rename(&self.path, &plain_path)?;
+                    thread::spawn(move || {
+                        let result =
+                            Self::compress(plain_path, temp_gz_path, rotated_path, restrict_perms);
+                        let _ = tx.send(result);
+                    });
 
-                self.wait_compression = Some(rx);
-            } else {
-                fs::rename(&self.path, rotated_path)?;
+                    self.wait_compression = Some(rx);
+                } else {
+                    fs::rename(&self.path, rotated_path)?;
+                }
             }
+            #[cfg(not(feature = "libflate"))]
+            fs::rename(&self.path, rotated_path)?;
         }
 
         let delete_path = self.rotated_path(self.rotate_keep + 1)?;
         if delete_path.exists() {
             fs::remove_file(delete_path)?;
         }
-
-        self.written_size = 0;
-        self.next_reopen_check = Instant::now();
-        self.reopen_if_needed()?;
 
         Ok(())
     }
@@ -358,12 +383,18 @@ impl FileAppender {
                 format!("Non UTF-8 log file path: {:?}", self.path),
             )
         })?;
-        if self.rotate_compress {
-            Ok(PathBuf::from(format!("{}.{}.gz", path, i)))
-        } else {
-            Ok(PathBuf::from(format!("{}.{}", path, i)))
+        #[cfg(feature = "libflate")]
+        {
+            if self.rotate_compress {
+                Ok(PathBuf::from(format!("{}.{}.gz", path, i)))
+            } else {
+                Ok(PathBuf::from(format!("{}.{}", path, i)))
+            }
         }
+        #[cfg(not(feature = "libflate"))]
+        Ok(PathBuf::from(format!("{}.{}", path, i)))
     }
+    #[cfg(feature = "libflate")]
     fn rotated_paths_for_compression(&self) -> io::Result<(PathBuf, PathBuf)> {
         let path = self.path.to_str().ok_or_else(|| {
             io::Error::new(
@@ -376,11 +407,21 @@ impl FileAppender {
             PathBuf::from(format!("{}.1.gz.temp", path)),
         ))
     }
-    fn compress(input_path: PathBuf, temp_path: PathBuf, output_path: PathBuf) -> io::Result<()> {
+    #[cfg(feature = "libflate")]
+    fn compress(
+        input_path: PathBuf,
+        temp_path: PathBuf,
+        output_path: PathBuf,
+        restrict_perms: bool,
+    ) -> io::Result<()> {
         let mut input = File::open(&input_path)?;
-        let mut temp = GzipEncoder::new(File::create(&temp_path)?)?;
-        io::copy(&mut input, &mut temp)?;
-        temp.finish().into_result()?;
+        let mut temp = File::create(&temp_path)?;
+        if restrict_perms {
+            temp = restrict_file_permissions(&temp_path, temp)?;
+        }
+        let mut output = GzipEncoder::new(temp)?;
+        io::copy(&mut input, &mut output)?;
+        output.finish().into_result()?;
 
         fs::rename(temp_path, output_path)?;
         fs::remove_file(input_path)?;
@@ -416,6 +457,7 @@ impl Write for FileAppender {
 
 /// The configuration of `FileLoggerBuilder`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct FileLoggerConfig {
     /// Log level.
     #[serde(default)]
@@ -480,6 +522,7 @@ pub struct FileLoggerConfig {
     ///
     /// The default value is `false`.
     #[serde(default)]
+    #[cfg(feature = "libflate")]
     pub rotate_compress: bool,
 
     /// Whether to drop logs on overflow.
@@ -489,6 +532,21 @@ pub struct FileLoggerConfig {
     /// The default value is `drop_and_report`.
     #[serde(default)]
     pub overflow_strategy: OverflowStrategy,
+
+    /// Whether to restrict the permissions of log files.
+    ///
+    /// For details, see the documentation of [`restict_permissions`].
+    ///
+    /// [`restrict_permissions`]: ./struct.FileLoggerBuilder.html#method.restrict_permissions
+    #[serde(default)]
+    pub restrict_permissions: bool,
+}
+
+impl FileLoggerConfig {
+    /// Creates a new `FileLoggerConfig` with default settings.
+    pub fn new() -> Self {
+        Default::default()
+    }
 }
 
 impl Config for FileLoggerConfig {
@@ -498,7 +556,7 @@ impl Config for FileLoggerConfig {
         let path_template = self.path.to_str().ok_or(ErrorKind::Invalid)?;
         let path =
             path_template_to_path(path_template, &self.timestamp_template, self.timezone, now);
-        let mut builder = FileLoggerBuilder::new(&path);
+        let mut builder = FileLoggerBuilder::new(path);
         builder.level(self.level);
         builder.format(self.format);
         builder.source_location(self.source_location);
@@ -507,7 +565,9 @@ impl Config for FileLoggerConfig {
         builder.channel_size(self.channel_size);
         builder.rotate_size(self.rotate_size);
         builder.rotate_keep(self.rotate_keep);
+        #[cfg(feature = "libflate")]
         builder.rotate_compress(self.rotate_compress);
+        builder.restrict_permissions(self.restrict_permissions);
         if self.truncate {
             builder.truncate();
         }
@@ -529,7 +589,9 @@ impl Default for FileLoggerConfig {
             truncate: false,
             rotate_size: default_rotate_size(),
             rotate_keep: default_rotate_keep(),
+            #[cfg(feature = "libflate")]
             rotate_compress: false,
+            restrict_permissions: false,
         }
     }
 }
@@ -543,9 +605,9 @@ fn path_template_to_path(
     let timestamp_string = match timezone {
         TimeZone::Local => {
             let local_timestamp = Local.from_utc_datetime(&date_time.naive_utc());
-            local_timestamp.format(&timestamp_template)
+            local_timestamp.format(timestamp_template)
         }
-        TimeZone::Utc => date_time.format(&timestamp_template),
+        TimeZone::Utc => date_time.format(timestamp_template),
     }
     .to_string();
     let path_string = path_template.replace("{timestamp}", &timestamp_string);
@@ -572,14 +634,13 @@ fn default_timestamp_template() -> String {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use crate::{Build, ErrorKind};
     use chrono::NaiveDateTime;
     use std::fs;
     use std::thread;
     use std::time::Duration;
     use tempfile::{Builder as TempDirBuilder, TempDir};
-
-    use super::*;
-    use {Build, ErrorKind};
 
     #[test]
     fn test_reopen_if_needed() {
@@ -690,7 +751,7 @@ mod tests {
             &path_template,
             "%Y%m%d_%H%M",
             TimeZone::Utc, // Local is difficult to test, omitting :(
-            Utc.from_utc_datetime(&NaiveDateTime::from_timestamp(1537265991, 0)),
+            Utc.from_utc_datetime(&NaiveDateTime::from_timestamp_opt(1537265991, 0).unwrap()),
         );
         let expected = dir.path().join("foo_20180918_1019.log");
         assert_eq!(expected, actual);

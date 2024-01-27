@@ -1,11 +1,12 @@
 //! Commonly used types.
+use crate::{Error, ErrorKind};
+#[cfg(feature = "slog-kvfilter")]
 use regex::Regex;
+use serde::{Deserialize, Serialize};
 use slog::{Drain, Level, LevelFilter};
-use slog_async;
+#[cfg(feature = "slog-kvfilter")]
 use slog_kvfilter::KVFilterList;
 use std::str::FromStr;
-
-use {Error, ErrorKind};
 
 /// The severity of a log record.
 ///
@@ -27,11 +28,14 @@ use {Error, ErrorKind};
 ///
 /// See [slog's documentation](https://docs.rs/slog/2.2.3/slog/#notable-details) for more details.
 #[allow(missing_docs)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(
+    Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
+)]
 #[serde(rename_all = "lowercase")]
 pub enum Severity {
     Trace,
     Debug,
+    #[default]
     Info,
     Warning,
     Error,
@@ -53,11 +57,6 @@ impl Severity {
     /// Sets `LevelFilter` to `drain`.
     pub fn set_level_filter<D: Drain>(self, drain: D) -> LevelFilter<D> {
         LevelFilter::new(drain, self.as_level())
-    }
-}
-impl Default for Severity {
-    fn default() -> Self {
-        Severity::Info
     }
 }
 impl FromStr for Severity {
@@ -93,8 +92,32 @@ impl FromStr for Severity {
 /// assert!(params.only_pass_on_regex.is_none());
 /// assert!(params.always_suppress_on_regex.is_none());
 /// ```
+///
+/// # Non-Exhaustive
+///
+/// This structure is marked [non-exhaustive]. It cannot be constructed using a `struct` expression:
+///
+/// ```compile_fail
+/// # use sloggers::types::{KVFilterParameters, Severity};
+/// let p = KVFilterParameters {
+///     severity: Severity::Warning,
+///     .. Default::default()
+/// };
+/// ```
+///
+/// Instead, use the `new` method to construct it, then fill the fields in:
+///
+/// ```
+/// # use sloggers::types::{KVFilterParameters, Severity};
+/// let mut p = KVFilterParameters::new();
+/// p.severity = Severity::Warning;
+/// ```
+///
+/// [non-exhaustive]: https://doc.rust-lang.org/stable/reference/attributes/type_system.html#the-non_exhaustive-attribute
 #[derive(Debug, Clone)]
-#[allow(missing_docs)]
+#[allow(missing_docs, clippy::upper_case_acronyms)]
+#[cfg(feature = "slog-kvfilter")]
+#[non_exhaustive]
 pub struct KVFilterParameters {
     pub severity: Severity,
     pub only_pass_any_on_all_keys: Option<KVFilterList>,
@@ -102,6 +125,7 @@ pub struct KVFilterParameters {
     pub only_pass_on_regex: Option<Regex>,
     pub always_suppress_on_regex: Option<Regex>,
 }
+#[cfg(feature = "slog-kvfilter")]
 impl Default for KVFilterParameters {
     fn default() -> Self {
         KVFilterParameters {
@@ -111,6 +135,14 @@ impl Default for KVFilterParameters {
             only_pass_on_regex: None,
             always_suppress_on_regex: None,
         }
+    }
+}
+#[cfg(feature = "slog-kvfilter")]
+impl KVFilterParameters {
+    /// Creates a new `KVFilterParameters` structure with default settings.
+    #[inline]
+    pub fn new() -> Self {
+        Default::default()
     }
 }
 
@@ -125,19 +157,20 @@ impl Default for KVFilterParameters {
 ///
 /// assert_eq!(Format::default(), Format::Full);
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[non_exhaustive]
 pub enum Format {
     /// Full format.
+    #[default]
     Full,
 
     /// Compact format.
     Compact,
-}
-impl Default for Format {
-    fn default() -> Self {
-        Format::Full
-    }
+
+    /// JSON format.
+    #[cfg(feature = "json")]
+    Json,
 }
 impl FromStr for Format {
     type Err = Error;
@@ -145,6 +178,8 @@ impl FromStr for Format {
         match s {
             "full" => Ok(Format::Full),
             "compact" => Ok(Format::Compact),
+            #[cfg(feature = "json")]
+            "json" => Ok(Format::Json),
             _ => track_panic!(ErrorKind::Invalid, "Undefined log format: {:?}", s),
         }
     }
@@ -162,16 +197,12 @@ impl FromStr for Format {
 /// assert_eq!(TimeZone::default(), TimeZone::Local);
 /// ```
 #[allow(missing_docs)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum TimeZone {
     Utc,
+    #[default]
     Local,
-}
-impl Default for TimeZone {
-    fn default() -> Self {
-        TimeZone::Local
-    }
 }
 impl FromStr for TimeZone {
     type Err = Error;
@@ -196,16 +227,15 @@ impl FromStr for TimeZone {
 /// assert_eq!(SourceLocation::default(), SourceLocation::ModuleAndLine);
 /// ```
 #[allow(missing_docs)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum SourceLocation {
     None,
+    #[default]
     ModuleAndLine,
-}
-impl Default for SourceLocation {
-    fn default() -> Self {
-        SourceLocation::ModuleAndLine
-    }
+    FileAndLine,
+    LocalFileAndLine,
 }
 impl FromStr for SourceLocation {
     type Err = Error;
@@ -213,6 +243,8 @@ impl FromStr for SourceLocation {
         match s {
             "none" => Ok(SourceLocation::None),
             "module_and_line" => Ok(SourceLocation::ModuleAndLine),
+            "file_and_line" => Ok(SourceLocation::FileAndLine),
+            "local_file_and_line" => Ok(SourceLocation::LocalFileAndLine),
             _ => track_panic!(
                 ErrorKind::Invalid,
                 "Undefined source code location: {:?}",
@@ -234,17 +266,14 @@ impl FromStr for SourceLocation {
 /// assert_eq!(OverflowStrategy::default(), OverflowStrategy::DropAndReport);
 /// ```
 #[allow(missing_docs)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum OverflowStrategy {
+    #[default]
     DropAndReport,
     Drop,
     Block,
-}
-impl Default for OverflowStrategy {
-    fn default() -> Self {
-        OverflowStrategy::DropAndReport
-    }
 }
 impl FromStr for OverflowStrategy {
     type Err = Error;

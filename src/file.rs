@@ -316,9 +316,7 @@ impl FileAppender {
                         return Ok(());
                     }
                     Err(TryRecvError::Disconnected) => {
-                        let e = io::Error::other(
-                            "Log file compression thread aborted",
-                        );
+                        let e = io::Error::other("Log file compression thread aborted");
                         return Err(e);
                     }
                     Ok(result) => {
@@ -451,9 +449,10 @@ impl Write for FileAppender {
         let size = if let Some(ref mut f) = self.file {
             f.write(buf)?
         } else {
-            return Err(io::Error::other(
-                format!("Cannot open file: {:?}", self.path),
-            ));
+            return Err(io::Error::other(format!(
+                "Cannot open file: {:?}",
+                self.path
+            )));
         };
 
         self.written_size += size as u64;

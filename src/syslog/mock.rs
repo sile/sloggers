@@ -29,7 +29,7 @@ pub enum Event {
 }
 
 static EVENTS: Lazy<Mutex<Vec<Event>>> = Lazy::new(|| Mutex::new(Vec::new()));
-static EVENTS_CV: Lazy<Condvar> = Lazy::new(|| Condvar::new());
+static EVENTS_CV: Lazy<Condvar> = Lazy::new(Condvar::new);
 static TESTING: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
 pub fn testing<T>(f: impl FnOnce() -> T) -> (T, Vec<Event>) {

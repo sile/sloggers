@@ -149,7 +149,7 @@ struct Rfc5424LikeValueEscaper<W: fmt::Write>(W);
 
 impl<W: fmt::Write> fmt::Write for Rfc5424LikeValueEscaper<W> {
     fn write_str(&mut self, mut s: &str) -> fmt::Result {
-        while let Some(index) = s.find(|c| c == '\\' || c == '"' || c == ']') {
+        while let Some(index) = s.find(['\\', '"', ']']) {
             if index != 0 {
                 self.0.write_str(&s[..index])?;
             }
@@ -184,8 +184,6 @@ impl<W: fmt::Write> fmt::Write for Rfc5424LikeValueEscaper<W> {
 
 #[test]
 fn test_rfc_5424_like_value_escaper() {
-    use std::iter;
-
     fn case(input: &str, expected_output: &str) {
         let mut e = Rfc5424LikeValueEscaper(String::new());
         fmt::Write::write_str(&mut e, input).unwrap();
@@ -198,7 +196,7 @@ fn test_rfc_5424_like_value_escaper() {
 
         {
             let input = format!("{}", c);
-            case(&*input, &*ec);
+            case(&input, &ec);
         }
 
         for at_start_count in 0..=2 {
@@ -209,27 +207,27 @@ fn test_rfc_5424_like_value_escaper() {
                     let mut expected_output = String::new();
 
                     // Place the symbol(s) at the beginning of the strings.
-                    input.extend(iter::repeat(c).take(at_start_count));
-                    expected_output.extend(iter::repeat(&*ec).take(at_start_count));
+                    input.extend(std::iter::repeat_n(c, at_start_count));
+                    expected_output.extend(std::iter::repeat_n(&*ec, at_start_count));
 
                     // First plain text.
                     input.push_str("foo");
                     expected_output.push_str("foo");
 
                     // Middle symbol(s).
-                    input.extend(iter::repeat(c).take(at_mid_count));
-                    expected_output.extend(iter::repeat(&*ec).take(at_mid_count));
+                    input.extend(std::iter::repeat_n(c, at_mid_count));
+                    expected_output.extend(std::iter::repeat_n(&*ec, at_mid_count));
 
                     // Second plain text.
                     input.push_str("bar");
                     expected_output.push_str("bar");
 
                     // End symbol(s).
-                    input.extend(iter::repeat(c).take(at_end_count));
-                    expected_output.extend(iter::repeat(&*ec).take(at_end_count));
+                    input.extend(std::iter::repeat_n(c, at_end_count));
+                    expected_output.extend(std::iter::repeat_n(&*ec, at_end_count));
 
                     // Finally, test this combination.
-                    case(&*input, &*expected_output);
+                    case(&input, &expected_output);
                 }
             }
         }

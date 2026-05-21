@@ -316,8 +316,7 @@ impl FileAppender {
                         return Ok(());
                     }
                     Err(TryRecvError::Disconnected) => {
-                        let e = io::Error::new(
-                            io::ErrorKind::Other,
+                        let e = io::Error::other(
                             "Log file compression thread aborted",
                         );
                         return Err(e);
@@ -452,8 +451,7 @@ impl Write for FileAppender {
         let size = if let Some(ref mut f) = self.file {
             f.write(buf)?
         } else {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
+            return Err(io::Error::other(
                 format!("Cannot open file: {:?}", self.path),
             ));
         };
@@ -636,8 +634,6 @@ fn default_channel_size() -> usize {
 }
 
 fn default_rotate_size() -> u64 {
-    use std::u64;
-
     u64::MAX
 }
 
@@ -653,7 +649,6 @@ fn default_timestamp_template() -> String {
 mod tests {
     use super::*;
     use crate::{Build, ErrorKind};
-    use chrono::NaiveDateTime;
     use std::fs;
     use std::thread;
     use std::time::Duration;
@@ -768,7 +763,7 @@ mod tests {
             &path_template,
             "%Y%m%d_%H%M",
             TimeZone::Utc, // Local is difficult to test, omitting :(
-            Utc.from_utc_datetime(&NaiveDateTime::from_timestamp_opt(1537265991, 0).unwrap()),
+            DateTime::from_timestamp(1537265991, 0).unwrap(),
         );
         let expected = dir.path().join("foo_20180918_1019.log");
         assert_eq!(expected, actual);
